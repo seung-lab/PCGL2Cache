@@ -26,9 +26,6 @@ from . import BigTableConfig
 from ..base import SimpleClient
 from ... import attributes
 from ... import exceptions
-from ...utils import basetypes
-from ...utils.serializers import pad_node_id
-from ...utils.serializers import serialize_key
 from ...utils.serializers import serialize_uint64
 from ...utils.serializers import deserialize_uint64
 from ...meta import ChunkedGraphMeta
@@ -78,11 +75,11 @@ class Client(bigtable.Client, SimpleClient):
             ValueError(f"{self._table.table_id} already exists.")
         self._table.create()
         self._create_column_families()
-        self.update_graph_meta(meta)
+        self.write_metadata(meta)
 
     def write_metadata(self, meta: ChunkedGraphMeta):
         self._graph_meta = meta
-        row = self.mutate_row(
+        row = self.mutate_entry(
             attributes.GraphMeta.key,
             {attributes.GraphMeta.Meta: meta},
         )
@@ -99,30 +96,23 @@ class Client(bigtable.Client, SimpleClient):
         end_id=None,
         end_id_inclusive=False,
         node_ids=None,
-        properties=None,
+        attributes=None,
         start_time=None,
         end_time=None,
         end_time_inclusive: bool = False,
-        fake_edges: bool = False,
     ):
         """
-        Read nodes and their properties.
+        Read nodes and their attributes.
         Accepts a range of node IDs or specific node IDs.
         """
         rows = self._read_byte_rows(
-            start_key=serialize_uint64(start_id, fake_edges=fake_edges)
-            if start_id is not None
-            else None,
-            end_key=serialize_uint64(end_id, fake_edges=fake_edges)
-            if end_id is not None
-            else None,
+            start_key=serialize_uint64(start_id) if start_id is not None else None,
+            end_key=serialize_uint64(end_id) if end_id is not None else None,
             end_key_inclusive=end_id_inclusive,
-            row_keys=(
-                serialize_uint64(node_id, fake_edges=fake_edges) for node_id in node_ids
-            )
+            row_keys=(serialize_uint64(node_id) for node_id in node_ids)
             if node_ids is not None
             else None,
-            columns=properties,
+            columns=attributes,
             start_time=start_time,
             end_time=end_time,
             end_time_inclusive=end_time_inclusive,
@@ -135,7 +125,7 @@ class Client(bigtable.Client, SimpleClient):
     def read_entry(
         self,
         node_id: np.uint64,
-        properties: typing.Optional[
+        attributes: typing.Optional[
             typing.Union[typing.Iterable[attributes._Attribute], attributes._Attribute]
         ] = None,
         start_time: typing.Optional[datetime] = None,
@@ -149,15 +139,15 @@ class Client(bigtable.Client, SimpleClient):
         """Convenience function for reading a single node from Bigtable."""
         return self._read_byte_row(
             row_key=serialize_uint64(node_id, fake_edges=fake_edges),
-            columns=properties,
+            columns=attributes,
             start_time=start_time,
             end_time=end_time,
             end_time_inclusive=end_time_inclusive,
         )
 
     def write_entries(self, nodes, root_ids=None, operation_id=None):
-        """Writes/updates entries with properties."""
-        # TODO convert entries and properties to bigtable rows
+        """Writes/updates entries with attributes."""
+        # TODO convert entries and attributes to bigtable rows
         pass
 
     # Helpers
@@ -172,10 +162,9 @@ class Client(bigtable.Client, SimpleClient):
         block_size: int = 2000,
     ):
         """Writes a list of mutated rows in bulk."""
+        initial = 1
         if slow_retry:
             initial = 5
-        else:
-            initial = 1
 
         exception_types = (Aborted, DeadlineExceeded, ServiceUnavailable)
         retry = Retry(
@@ -186,14 +175,6 @@ class Client(bigtable.Client, SimpleClient):
             deadline=self.graph_meta.graph_config.ROOT_LOCK_EXPIRY.seconds,
         )
 
-        if root_ids is not None and operation_id is not None:
-            if isinstance(root_ids, int):
-                root_ids = [root_ids]
-            if not self.renew_locks(root_ids, operation_id):
-                raise exceptions.LockingError(
-                    f"Root lock renewal failed: operation {operation_id}"
-                )
-
         for i in range(0, len(rows), block_size):
             status = self._table.mutate_rows(rows[i : i + block_size], retry=retry)
             if not all(status):
@@ -201,7 +182,7 @@ class Client(bigtable.Client, SimpleClient):
                     f"Bulk write failed: operation {operation_id}"
                 )
 
-    def mutate_row(
+    def mutate_entry(
         self,
         row_key: bytes,
         val_dict: typing.Dict[attributes._Attribute, typing.Any],

@@ -14,34 +14,34 @@ from multiwrapper import multiprocessing_utils as mu
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     bbox = np.array(cv.bounds.to_list())
-    
+
     vol_coord_start = bbox[:3] + chunk_coord
     vol_coord_end = vol_coord_start + chunk_size
-    
-    vol = cv[vol_coord_start[0]: vol_coord_end[0],
-             vol_coord_start[1]: vol_coord_end[1],
-             vol_coord_start[2]: vol_coord_end[2]][..., 0]
-    
+
+    vol = cv[
+        vol_coord_start[0] : vol_coord_end[0],
+        vol_coord_start[1] : vol_coord_end[1],
+        vol_coord_start[2] : vol_coord_end[2],
+    ][..., 0]
+
     sv_ids = fastremap.unique(vol)
     sv_ids = sv_ids[sv_ids != 0]
-    
+
     if len(sv_ids) == 0:
         return vol.astype(np.uint32), {}
-    
+
     l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
-    
+
     u_l2_ids = fastremap.unique(l2_ids)
 
-    u_cont_ids = np.arange(1, 1+len(u_l2_ids))
-    
-    cont_ids = fastremap.remap(l2_ids, 
-                               dict(zip(u_l2_ids, u_cont_ids)))
+    u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
 
-    fastremap.remap(vol,
-                    dict(zip(sv_ids, cont_ids)),
-                    preserve_missing_labels=True, 
-                    in_place=True)
-    
+    cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
+
+    fastremap.remap(
+        vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
+    )
+
     return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
 
 
@@ -53,15 +53,17 @@ def dist_weight(cv, coords):
 
 def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     vol_dt = edt.edt(
-        vol_l2, 
-        anisotropy=cv.resolution, 
+        vol_l2,
+        anisotropy=cv.resolution,
         black_border=False,
-        parallel=1 # number of threads, <= 0 sets to num cpu
-    ) 
+        parallel=1,  # number of threads, <= 0 sets to num cpu
+    )
 
     shape = np.array(vol_l2.shape)
     size = np.product(shape)
-    stack = ((vol_dt.astype(np.uint64).flatten()) << 32) + np.arange(size, dtype=np.uint64)
+    stack = ((vol_dt.astype(np.uint64).flatten()) << 32) + np.arange(
+        size, dtype=np.uint64
+    )
 
     cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
     pca = decomposition.PCA(3)
@@ -89,26 +91,33 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
         l2_sizes.append(len(idxs))
         l2_max_dts.append(dts[max_idx])
         l2_mean_dts.append(np.mean(dts))
-        l2_chunk_intersects.append([np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)])
+        l2_chunk_intersects.append(
+            [np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)]
+        )
 
         if len(coords) < 3:
             coords_p = np.concatenate([coords, coords, coords])
         elif len(coords) > 10000:
-            coords_p = np.array(np.unravel_index(np.random.choice(idxs, 10000, replace=False), vol_l2.shape)).T
+            coords_p = np.array(
+                np.unravel_index(
+                    np.random.choice(idxs, 10000, replace=False), vol_l2.shape
+                )
+            ).T
         else:
             coords_p = coords
 
         l2_pca_comps.append(pca.fit(coords_p * cv.resolution).components_)
-
 
     offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
     l2_sizes = np.array(np.array(l2_sizes) * np.product(cv.resolution))
     l2_max_dts = np.array(l2_max_dts)
     l2_mean_dts = np.array(l2_mean_dts)
     l2_max_coords = np.array((np.array(l2_max_coords) + offset) * cv.resolution)
-    l2_max_scaled_coords = np.array((np.array(l2_max_scaled_coords) + offset)  * cv.resolution)
+    l2_max_scaled_coords = np.array(
+        (np.array(l2_max_scaled_coords) + offset) * cv.resolution
+    )
     l2_bboxs = np.array(l2_bboxs) + offset
-    l2_pca_comps = np.array(l2_pca_comps) 
+    l2_pca_comps = np.array(l2_pca_comps)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
 
     ## Area calculations
@@ -116,9 +125,16 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     y_m = vol_l2[:, 1:] != vol_l2[:, :-1]
     z_m = vol_l2[:, :, 1:] != vol_l2[:, :, :-1]
 
-    u_x, c_x = fastremap.unique(np.concatenate([vol_l2[1:][x_m], vol_l2[:-1][x_m]]), return_counts=True)
-    u_y, c_y = fastremap.unique(np.concatenate([vol_l2[:, 1:][y_m], vol_l2[:, :-1][y_m]]), return_counts=True)
-    u_z, c_z = fastremap.unique(np.concatenate([vol_l2[:, :, 1:][z_m], vol_l2[:, :, :-1][z_m]]), return_counts=True)
+    u_x, c_x = fastremap.unique(
+        np.concatenate([vol_l2[1:][x_m], vol_l2[:-1][x_m]]), return_counts=True
+    )
+    u_y, c_y = fastremap.unique(
+        np.concatenate([vol_l2[:, 1:][y_m], vol_l2[:, :-1][y_m]]), return_counts=True
+    )
+    u_z, c_z = fastremap.unique(
+        np.concatenate([vol_l2[:, :, 1:][z_m], vol_l2[:, :, :-1][z_m]]),
+        return_counts=True,
+    )
 
     x_area = np.product(cv.resolution[[1, 2]])
     y_area = np.product(cv.resolution[[0, 2]])
@@ -131,14 +147,16 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     area_dict = x_dict + y_dict + z_dict
     areas = np.array([area_dict[l2_id] for l2_id in l2_ids])
 
-    return {"l2id": fastremap.remap(l2_ids, l2_dict).astype(np.uint64),
-            "size_nm3": l2_sizes.astype(np.uint32),
-            "area_nm2": areas.astype(np.uint32),
-            "max_dt_nm": l2_max_dts.astype(np.uint16),
-            "mean_dt_nm": l2_mean_dts.astype(np.float16),
-            "rep_coord_nm": l2_max_scaled_coords.astype(np.uint64),
-            "chunk_intersect_count": l2_chunk_intersects.astype(np.uint16),
-            "pca_comp": l2_pca_comps.astype(np.float16)}
+    return {
+        "l2id": fastremap.remap(l2_ids, l2_dict).astype(np.uint64),
+        "size_nm3": l2_sizes.astype(np.uint32),
+        "area_nm2": areas.astype(np.uint32),
+        "max_dt_nm": l2_max_dts.astype(np.uint16),
+        "mean_dt_nm": l2_mean_dts.astype(np.float16),
+        "rep_coord_nm": l2_max_scaled_coords.astype(np.uint64),
+        "chunk_intersect_count": l2_chunk_intersects.astype(np.uint16),
+        "pca_comp": l2_pca_comps.astype(np.float16),
+    }
 
 
 def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
@@ -152,15 +170,17 @@ def _l2cache_thread(args):
     worker_id, cg_info, cv_path, coord_ids, timestamp, storage_path = args
 
     cg = chunkedgraph.ChunkedGraph(**cg_info)
-    cv = cloudvolume.CloudVolume(cv_path, bounded=False, 
-                                 fill_missing=True, progress=False,
-                                 mip=cg.cv.mip)
+    cv = cloudvolume.CloudVolume(
+        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
+    )
     chunk_size = cg.chunk_size.astype(np.int)
-    
+
     ret_dicts = []
     for coord_id in coord_ids:
         chunk_coord = coord_id * chunk_size
-        ret_dicts.append(download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp))
+        ret_dicts.append(
+            download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
+        )
 
     comb_ret_dict = collections.defaultdict(list)
 
@@ -174,26 +194,31 @@ def _l2cache_thread(args):
     else:
         return comb_ret_dict
 
-            
-def run_l2cache_preproc(cg_table_id, cv_path, storage_path, timestamp=None, 
-                        block_size=100, n_threads=50):
-    
+
+def run_l2cache_preproc(
+    cg_table_id, cv_path, storage_path, timestamp=None, block_size=100, n_threads=50
+):
+
     cg = chunkedgraph.ChunkedGraph(cg_table_id)
 
     if not os.path.exists(storage_path):
         os.makedirs(storage_path)
 
     with open(f"{storage_path}/info.json") as f:
-        json.dump({"timestamp": timestamp,
-                   "cg_table_id": cg_table_id,
-                   "cv_path": cv_path,
-                   "block_size": block_size},
-                   f)
-    
+        json.dump(
+            {
+                "timestamp": timestamp,
+                "cg_table_id": cg_table_id,
+                "cv_path": cv_path,
+                "block_size": block_size,
+            },
+            f,
+        )
+
     cg_info = cg.get_serialized_info()
     if "credentials" in cg_info:
         del cg_info["credentials"]
-    
+
     bbox = np.array(cg.cv.bounds.to_list())
     dataset_size = bbox[3:] - bbox[:3]
     dataset_csize = np.ceil(dataset_size / cg.chunk_size).astype(np.int)
@@ -204,17 +229,24 @@ def run_l2cache_preproc(cg_table_id, cv_path, storage_path, timestamp=None,
         for chunk_y in range(0, dataset_csize[1]):
             for chunk_z in range(0, dataset_csize[2]):
                 coord_ids.append([chunk_x, chunk_y, chunk_z])
-                
+
                 if len(coord_ids) >= block_size:
-                    multi_args.append([len(multi_args), cg_info, cv_path, coord_ids, 
-                                       timestamp, storage_path])
+                    multi_args.append(
+                        [
+                            len(multi_args),
+                            cg_info,
+                            cv_path,
+                            coord_ids,
+                            timestamp,
+                            storage_path,
+                        ]
+                    )
                     coord_ids = []
 
     multi_args = multi_args[:20]
     if n_threads == 1:
-        mu.multithread_func(_l2cache_thread, multi_args,
-                            n_threads=1, debug=True)
+        mu.multithread_func(_l2cache_thread, multi_args, n_threads=1, debug=True)
     else:
-        mu.multisubprocess_func(_l2cache_thread, multi_args,
-                                n_threads=n_threads,
-                                 package_name="pcgl2cache")
+        mu.multisubprocess_func(
+            _l2cache_thread, multi_args, n_threads=n_threads, package_name="pcgl2cache"
+        )

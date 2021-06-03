@@ -6,7 +6,7 @@ from .. import serializers
 class _AttributeType(NamedTuple):
     key: bytes
     family_id: str
-    serializer: serializers._Serializer
+    serializer: serializers.Serializer
 
 
 class Attribute(_AttributeType):

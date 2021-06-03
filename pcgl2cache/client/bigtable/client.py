@@ -10,11 +10,6 @@ import numpy as np
 from multiwrapper import multiprocessing_utils as mu
 from google.auth import credentials
 from google.cloud import bigtable
-from google.api_core.retry import Retry
-from google.api_core.retry import if_exception_type
-from google.api_core.exceptions import Aborted
-from google.api_core.exceptions import DeadlineExceeded
-from google.api_core.exceptions import ServiceUnavailable
 from google.cloud.bigtable.table import Table
 from google.cloud.bigtable.row_set import RowSet
 from google.cloud.bigtable.row_data import PartialRowData
@@ -23,12 +18,9 @@ from google.cloud.bigtable.column_family import MaxVersionsGCRule
 
 from . import utils
 from . import BigTableConfig
+from . import attributes
+from .. import serializers
 from ..base import SimpleClient
-from ... import attributes
-from ... import exceptions
-from ...utils.serializers import serialize_uint64
-from ...utils.serializers import deserialize_uint64
-from ...meta import ChunkedGraphMeta
 
 
 class Client(bigtable.Client, SimpleClient):
@@ -88,42 +80,42 @@ class Client(bigtable.Client, SimpleClient):
         )
         self.write([row])
 
-    def read_metadata(self) -> ChunkedGraphMeta:
+    def read_metadata(self) -> typing.Any:
         row = self._read_byte_row(attributes.TableMeta.key)
         self._table_meta = row[attributes.TableMeta.data][0].value
         return self._table_meta
 
     def read_entries(
         self,
-        start_id=None,
-        end_id=None,
-        end_id_inclusive=False,
-        node_ids=None,
+        start_key=None,
+        end_key=None,
+        end_key_inclusive=False,
+        keys=None,
         attributes=None,
         start_time=None,
         end_time=None,
         end_time_inclusive: bool = False,
+        key_serializer: serializers.Serializer = serializers.String,
     ):
         """
         Read nodes and their attributes.
         Accepts a range of node IDs or specific node IDs.
         """
         rows = self._read_byte_rows(
-            start_key=serialize_uint64(start_id) if start_id is not None else None,
-            end_key=serialize_uint64(end_id) if end_id is not None else None,
-            end_key_inclusive=end_id_inclusive,
-            row_keys=(serialize_uint64(node_id) for node_id in node_ids)
-            if node_ids is not None
+            start_key=key_serializer.serialize(start_key)
+            if start_key is not None
+            else None,
+            end_key=key_serializer.serialize(end_key) if end_key is not None else None,
+            end_key_inclusive=end_key_inclusive,
+            row_keys=(key_serializer.serialize(key) for key in keys)
+            if keys is not None
             else None,
             columns=attributes,
             start_time=start_time,
             end_time=end_time,
             end_time_inclusive=end_time_inclusive,
         )
-        return {
-            deserialize_uint64(row_key, fake_edges=fake_edges): data
-            for (row_key, data) in rows.items()
-        }
+        return {key_serializer.deserialize(key): data for (key, data) in rows.items()}
 
     def read_entry(
         self,
@@ -163,6 +155,11 @@ class Client(bigtable.Client, SimpleClient):
     ):
         """Writes a list of mutated rows in bulk."""
         from os import environ
+        from google.api_core.retry import Retry
+        from google.api_core.retry import if_exception_type
+        from google.api_core.exceptions import Aborted
+        from google.api_core.exceptions import DeadlineExceeded
+        from google.api_core.exceptions import ServiceUnavailable
 
         initial = 1
         if slow_retry:

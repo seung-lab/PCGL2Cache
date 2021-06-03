@@ -6,7 +6,7 @@ import numpy as np
 import zstandard as zstd
 
 
-class _Serializer:
+class Serializer:
     def __init__(self, serializer, deserializer, basetype=Any, compression_level=None):
         self._serializer = serializer
         self._deserializer = deserializer
@@ -29,7 +29,7 @@ class _Serializer:
         return self._basetype
 
 
-class NumPyArray(_Serializer):
+class NumPyArray(Serializer):
     @staticmethod
     def _deserialize(val, dtype, shape=None, order=None):
         data = np.frombuffer(val, dtype=dtype)
@@ -50,7 +50,7 @@ class NumPyArray(_Serializer):
         )
 
 
-class NumPyValue(_Serializer):
+class NumPyValue(Serializer):
     def __init__(self, dtype):
         super().__init__(
             serializer=lambda x: x.newbyteorder(dtype.byteorder).tobytes(),
@@ -59,7 +59,7 @@ class NumPyValue(_Serializer):
         )
 
 
-class String(_Serializer):
+class String(Serializer):
     def __init__(self, encoding="utf-8"):
         super().__init__(
             serializer=lambda x: x.encode(encoding),
@@ -68,7 +68,7 @@ class String(_Serializer):
         )
 
 
-class JSON(_Serializer):
+class JSON(Serializer):
     def __init__(self):
         super().__init__(
             serializer=lambda x: json.dumps(x).encode("utf-8"),
@@ -77,7 +77,7 @@ class JSON(_Serializer):
         )
 
 
-class Pickle(_Serializer):
+class Pickle(Serializer):
     def __init__(self):
         super().__init__(
             serializer=lambda x: pickle.dumps(x),
@@ -86,7 +86,7 @@ class Pickle(_Serializer):
         )
 
 
-class UInt64String(_Serializer):
+class UInt64String(Serializer):
     def __init__(self):
         super().__init__(
             serializer=serialize_uint64,

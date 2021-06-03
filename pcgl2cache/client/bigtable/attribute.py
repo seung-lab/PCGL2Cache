@@ -68,3 +68,9 @@ class AttributeArray:
     @property
     def basetype(self):
         return self._serializer.basetype
+
+
+class TableMeta:
+    key = b"meta"
+    family_id = "0"
+    data = Attribute(key=key, family_id=family_id, serializer=serializers.Pickle())

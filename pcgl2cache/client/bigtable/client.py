@@ -36,7 +36,6 @@ class Client(bigtable.Client, SimpleClient):
         self,
         table_id: str,
         config: BigTableConfig = BigTableConfig(),
-        graph_meta: ChunkedGraphMeta = None,
     ):
         if config.CREDENTIALS:
             super(Client, self).__init__(
@@ -53,42 +52,46 @@ class Client(bigtable.Client, SimpleClient):
             )
         self._instance = self.instance(config.INSTANCE)
         self._table = self._instance.table(table_id)
-
-        self.logger = logging.getLogger(
-            f"{config.PROJECT}/{config.INSTANCE}/{table_id}"
-        )
-        self.logger.setLevel(logging.WARNING)
-        if not self.logger.handlers:
-            sh = logging.StreamHandler(sys.stdout)
-            sh.setLevel(logging.WARNING)
-            self.logger.addHandler(sh)
-        self._graph_meta = graph_meta
+        self._table_meta = {}
 
     @property
-    def graph_meta(self):
-        return self._graph_meta
+    def table_meta(self) -> typing.Any:
+        return self._table_meta
 
-    # BASE
-    def create_table(self, meta: ChunkedGraphMeta) -> None:
+    def create_column_families(
+        self, families: typing.Iterable[typing.Tuple[str, int]]
+    ) -> None:
+        """
+        Creates column families for a table.
+        Family '0' is created by default to store metadata.
+        """
+        for family in families:
+            name, version = family
+            if version is None:
+                self._table.column_family(name).create()
+                continue
+            self._table.column_family(name, gc_rule=MaxVersionsGCRule(version)).create()
+
+    def create_table(self, meta: typing.Any = {}) -> None:
         """Initialize the graph and store associated meta."""
-        if not meta.graph_config.OVERWRITE and self._table.exists():
+        if self._table.exists():
             ValueError(f"{self._table.table_id} already exists.")
         self._table.create()
-        self._create_column_families()
+        self._table.column_family("0").create()
         self.write_metadata(meta)
 
-    def write_metadata(self, meta: ChunkedGraphMeta):
-        self._graph_meta = meta
-        row = self.mutate_entry(
-            attributes.GraphMeta.key,
-            {attributes.GraphMeta.Meta: meta},
+    def write_metadata(self, meta: typing.Any) -> None:
+        self._table_meta = meta
+        row = self.mutate_row(
+            attributes.TableMeta.key,
+            {attributes.TableMeta.data: meta},
         )
         self.write([row])
 
     def read_metadata(self) -> ChunkedGraphMeta:
-        row = self._read_byte_row(attributes.GraphMeta.key)
-        self._graph_meta = row[attributes.GraphMeta.Meta][0].value
-        return self._graph_meta
+        row = self._read_byte_row(attributes.TableMeta.key)
+        self._table_meta = row[attributes.TableMeta.data][0].value
+        return self._table_meta
 
     def read_entries(
         self,
@@ -126,14 +129,14 @@ class Client(bigtable.Client, SimpleClient):
         self,
         node_id: np.uint64,
         attributes: typing.Optional[
-            typing.Union[typing.Iterable[attributes._Attribute], attributes._Attribute]
+            typing.Union[typing.Iterable[attributes.Attribute], attributes.Attribute]
         ] = None,
         start_time: typing.Optional[datetime] = None,
         end_time: typing.Optional[datetime] = None,
         end_time_inclusive: bool = False,
         fake_edges: bool = False,
     ) -> typing.Union[
-        typing.Dict[attributes._Attribute, typing.List[bigtable.row_data.Cell]],
+        typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
         typing.List[bigtable.row_data.Cell],
     ]:
         """Convenience function for reading a single node from Bigtable."""
@@ -145,7 +148,7 @@ class Client(bigtable.Client, SimpleClient):
             end_time_inclusive=end_time_inclusive,
         )
 
-    def write_entries(self, nodes, root_ids=None, operation_id=None):
+    def write_entries(self, entries):
         """Writes/updates entries with attributes."""
         # TODO convert entries and attributes to bigtable rows
         pass
@@ -154,14 +157,13 @@ class Client(bigtable.Client, SimpleClient):
     def write(
         self,
         rows: typing.Iterable[bigtable.row.DirectRow],
-        root_ids: typing.Optional[
-            typing.Union[np.uint64, typing.Iterable[np.uint64]]
-        ] = None,
         operation_id: typing.Optional[np.uint64] = None,
         slow_retry: bool = True,
         block_size: int = 2000,
     ):
         """Writes a list of mutated rows in bulk."""
+        from os import environ
+
         initial = 1
         if slow_retry:
             initial = 5
@@ -172,50 +174,32 @@ class Client(bigtable.Client, SimpleClient):
             initial=initial,
             maximum=15.0,
             multiplier=2.0,
-            deadline=self.graph_meta.graph_config.ROOT_LOCK_EXPIRY.seconds,
+            deadline=float(environ.get("BIGTABLE_WRITE_RETRY_DEADLINE", 180.0)),
         )
 
         for i in range(0, len(rows), block_size):
             status = self._table.mutate_rows(rows[i : i + block_size], retry=retry)
             if not all(status):
-                raise exceptions.ChunkedGraphError(
-                    f"Bulk write failed: operation {operation_id}"
-                )
+                raise IOError("Bulk write failed.")
 
-    def mutate_entry(
+    def mutate_row(
         self,
         row_key: bytes,
-        val_dict: typing.Dict[attributes._Attribute, typing.Any],
+        val_dict: typing.Dict[attributes.Attribute, typing.Any],
         time_stamp: typing.Optional[datetime] = None,
     ) -> bigtable.row.Row:
         """Mutates a single row (doesn't write to big table)."""
         row = self._table.direct_row(row_key)
-        for column, value in val_dict.items():
+        for attr, value in val_dict.items():
             row.set_cell(
-                column_family_id=column.family_id,
-                column=column.key,
-                value=column.serialize(value),
+                column_family_id=attr.family_id,
+                column=attr.key,
+                value=attr.serialize(value),
                 timestamp=time_stamp,
             )
         return row
 
-    def get_compatible_timestamp(
-        self, time_stamp: datetime, round_up: bool = False
-    ) -> datetime:
-        return utils.get_google_compatible_time_stamp(time_stamp, round_up=False)
-
     # PRIVATE METHODS
-    def _create_column_families(self):
-        # TODO hardcoded, not good
-        f = self._table.column_family("0")
-        f.create()
-        f = self._table.column_family("1", gc_rule=MaxVersionsGCRule(1))
-        f.create()
-        f = self._table.column_family("2")
-        f.create()
-        f = self._table.column_family("3", gc_rule=MaxVersionsGCRule(1))
-        f.create()
-
     def _read_byte_rows(
         self,
         start_key: typing.Optional[bytes] = None,
@@ -223,7 +207,7 @@ class Client(bigtable.Client, SimpleClient):
         end_key_inclusive: bool = False,
         row_keys: typing.Optional[typing.Iterable[bytes]] = None,
         columns: typing.Optional[
-            typing.Union[typing.Iterable[attributes._Attribute], attributes._Attribute]
+            typing.Union[typing.Iterable[attributes.Attribute], attributes.Attribute]
         ] = None,
         start_time: typing.Optional[datetime] = None,
         end_time: typing.Optional[datetime] = None,
@@ -231,7 +215,7 @@ class Client(bigtable.Client, SimpleClient):
     ) -> typing.Dict[
         bytes,
         typing.Union[
-            typing.Dict[attributes._Attribute, typing.List[bigtable.row_data.Cell]],
+            typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
             typing.List[bigtable.row_data.Cell],
         ],
     ]:
@@ -268,7 +252,7 @@ class Client(bigtable.Client, SimpleClient):
                 for cell_entry in cell_entries:
                     cell_entry.value = column.deserialize(cell_entry.value)
             # If no column array was requested, reattach single column's values directly to the row
-            if isinstance(columns, attributes._Attribute):
+            if isinstance(columns, attributes.Attribute):
                 rows[row_key] = cell_entries
         return rows
 
@@ -276,13 +260,13 @@ class Client(bigtable.Client, SimpleClient):
         self,
         row_key: bytes,
         columns: typing.Optional[
-            typing.Union[typing.Iterable[attributes._Attribute], attributes._Attribute]
+            typing.Union[typing.Iterable[attributes.Attribute], attributes.Attribute]
         ] = None,
         start_time: typing.Optional[datetime] = None,
         end_time: typing.Optional[datetime] = None,
         end_time_inclusive: bool = False,
     ) -> typing.Union[
-        typing.Dict[attributes._Attribute, typing.List[bigtable.row_data.Cell]],
+        typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
         typing.List[bigtable.row_data.Cell],
     ]:
         """Convenience function for reading a single row."""
@@ -295,7 +279,7 @@ class Client(bigtable.Client, SimpleClient):
         )
         return (
             row.get(row_key, [])
-            if isinstance(columns, attributes._Attribute)
+            if isinstance(columns, attributes.Attribute)
             else row.get(row_key, {})
         )
 
@@ -312,7 +296,7 @@ class Client(bigtable.Client, SimpleClient):
     def _read(
         self, row_set: RowSet, row_filter: RowFilter = None
     ) -> typing.Dict[
-        bytes, typing.Dict[attributes._Attribute, bigtable.row_data.PartialRowData]
+        bytes, typing.Dict[attributes.Attribute, bigtable.row_data.PartialRowData]
     ]:
         """Core function to read rows from Bigtable. Uses standard Bigtable retry logic."""
         # FIXME: Bigtable limits the length of the serialized request to 512 KiB. We should

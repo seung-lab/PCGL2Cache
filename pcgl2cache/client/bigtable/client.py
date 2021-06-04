@@ -40,9 +40,11 @@ class Client(BTClient, SimpleClient):
         self._instance = self.instance(config.INSTANCE)
         self._table = self._instance.table(table_id)
         self._table_meta = {}
+        if self._table.exists():
+            self._table_meta = self.read_metadata()
 
     @property
-    def table_meta(self) -> typing.Any:
+    def meta(self) -> typing.Any:
         return self._table_meta
 
     def create_column_families(
@@ -77,8 +79,7 @@ class Client(BTClient, SimpleClient):
 
     def read_metadata(self) -> typing.Any:
         row = self._read_byte_row(attributes.TableMeta.key)
-        self._table_meta = row[attributes.TableMeta.data][0].value
-        return self._table_meta
+        return row[attributes.TableMeta.data][0].value
 
     def read_entries(
         self,

@@ -1,20 +1,15 @@
-import sys
-import time
 import typing
-import logging
-import datetime
 from datetime import datetime
-from datetime import timedelta
 
-import numpy as np
-from multiwrapper import multiprocessing_utils as mu
-from google.auth import credentials
-from google.cloud import bigtable
-from google.cloud.bigtable.table import Table
+from google.cloud.bigtable import Client as BTClient
+from google.cloud.bigtable.column_family import MaxVersionsGCRule
+from google.cloud.bigtable.row import Row
+from google.cloud.bigtable.row import DirectRow
 from google.cloud.bigtable.row_set import RowSet
+from google.cloud.bigtable.row_data import Cell
 from google.cloud.bigtable.row_data import PartialRowData
 from google.cloud.bigtable.row_filters import RowFilter
-from google.cloud.bigtable.column_family import MaxVersionsGCRule
+from google.cloud.bigtable.table import Table
 
 from . import utils
 from . import BigTableConfig
@@ -23,7 +18,7 @@ from .. import serializers
 from ..base import SimpleClient
 
 
-class Client(bigtable.Client, SimpleClient):
+class Client(BTClient, SimpleClient):
     def __init__(
         self,
         table_id: str,
@@ -98,8 +93,9 @@ class Client(bigtable.Client, SimpleClient):
         key_serializer: serializers.Serializer = serializers.String,
     ):
         """
-        Read nodes and their attributes.
-        Accepts a range of node IDs or specific node IDs.
+        Read entries and their attributes.
+        Accepts a range of keys or specific keys.
+        Custom serializers can be used, `serializers.String` is the default.
         """
         rows = self._read_byte_rows(
             start_key=key_serializer.serialize(start_key)
@@ -119,21 +115,19 @@ class Client(bigtable.Client, SimpleClient):
 
     def read_entry(
         self,
-        node_id: np.uint64,
-        attributes: typing.Optional[
-            typing.Union[typing.Iterable[attributes.Attribute], attributes.Attribute]
-        ] = None,
-        start_time: typing.Optional[datetime] = None,
-        end_time: typing.Optional[datetime] = None,
+        key,
+        attributes=None,
+        start_time=None,
+        end_time=None,
         end_time_inclusive: bool = False,
-        fake_edges: bool = False,
+        key_serializer: serializers.Serializer = serializers.String,
     ) -> typing.Union[
-        typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
-        typing.List[bigtable.row_data.Cell],
+        typing.Dict[attributes.Attribute, typing.List[Cell]],
+        typing.List[Cell],
     ]:
         """Convenience function for reading a single node from Bigtable."""
         return self._read_byte_row(
-            row_key=serialize_uint64(node_id, fake_edges=fake_edges),
+            row_key=key_serializer.serialize(key),
             columns=attributes,
             start_time=start_time,
             end_time=end_time,
@@ -148,8 +142,7 @@ class Client(bigtable.Client, SimpleClient):
     # Helpers
     def write(
         self,
-        rows: typing.Iterable[bigtable.row.DirectRow],
-        operation_id: typing.Optional[np.uint64] = None,
+        rows: typing.Iterable[DirectRow],
         slow_retry: bool = True,
         block_size: int = 2000,
     ):
@@ -184,7 +177,7 @@ class Client(bigtable.Client, SimpleClient):
         row_key: bytes,
         val_dict: typing.Dict[attributes.Attribute, typing.Any],
         time_stamp: typing.Optional[datetime] = None,
-    ) -> bigtable.row.Row:
+    ) -> Row:
         """Mutates a single row (doesn't write to big table)."""
         row = self._table.direct_row(row_key)
         for attr, value in val_dict.items():
@@ -212,8 +205,8 @@ class Client(bigtable.Client, SimpleClient):
     ) -> typing.Dict[
         bytes,
         typing.Union[
-            typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
-            typing.List[bigtable.row_data.Cell],
+            typing.Dict[attributes.Attribute, typing.List[Cell]],
+            typing.List[Cell],
         ],
     ]:
         """Main function for reading a row range or non-contiguous row sets."""
@@ -230,10 +223,7 @@ class Client(bigtable.Client, SimpleClient):
                 end_inclusive=end_key_inclusive,
             )
         else:
-            raise exceptions.PreconditionError(
-                "Need to either provide a valid set of rows, or"
-                " both, a start row and an end row."
-            )
+            raise ValueError("Invalid row keys.")
         filter_ = utils.get_time_range_and_column_filter(
             columns=columns,
             start_time=start_time,
@@ -263,8 +253,8 @@ class Client(bigtable.Client, SimpleClient):
         end_time: typing.Optional[datetime] = None,
         end_time_inclusive: bool = False,
     ) -> typing.Union[
-        typing.Dict[attributes.Attribute, typing.List[bigtable.row_data.Cell]],
-        typing.List[bigtable.row_data.Cell],
+        typing.Dict[attributes.Attribute, typing.List[Cell]],
+        typing.List[Cell],
     ]:
         """Convenience function for reading a single row."""
         row = self._read_byte_rows(
@@ -292,16 +282,18 @@ class Client(bigtable.Client, SimpleClient):
 
     def _read(
         self, row_set: RowSet, row_filter: RowFilter = None
-    ) -> typing.Dict[
-        bytes, typing.Dict[attributes.Attribute, bigtable.row_data.PartialRowData]
-    ]:
+    ) -> typing.Dict[bytes, typing.Dict[attributes.Attribute, PartialRowData]]:
         """Core function to read rows from Bigtable. Uses standard Bigtable retry logic."""
         # FIXME: Bigtable limits the length of the serialized request to 512 KiB. We should
         # calculate this properly (range_read.request.SerializeToString()), but this estimate is
         # good enough for now
+        from numpy import ceil
+        from multiwrapper.multiprocessing_utils import n_cpus
+        from multiwrapper.multiprocessing_utils import multithread_func
+
         max_row_key_count = 1000
-        n_subrequests = max(1, int(np.ceil(len(row_set.row_keys) / max_row_key_count)))
-        n_threads = min(n_subrequests, 2 * mu.n_cpus)
+        n_subrequests = max(1, int(ceil(len(row_set.row_keys) / max_row_key_count)))
+        n_threads = min(n_subrequests, 2 * n_cpus)
 
         row_sets = []
         for i in range(n_subrequests):
@@ -313,7 +305,7 @@ class Client(bigtable.Client, SimpleClient):
 
         # Don't forget the original RowSet's row_ranges
         row_sets[0].row_ranges = row_set.row_ranges
-        responses = mu.multithread_func(
+        responses = multithread_func(
             self._execute_read_thread,
             params=((self._table, r, row_filter) for r in row_sets),
             debug=n_threads == 1,

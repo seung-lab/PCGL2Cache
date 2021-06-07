@@ -166,15 +166,11 @@ def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
     return calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict)
 
 
-def _l2cache_thread(args):
-    worker_id, cg_info, cv_path, coord_ids, timestamp, storage_path = args
-
-    cg = chunkedgraph.ChunkedGraph(**cg_info)
+def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
     cv = cloudvolume.CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
     chunk_size = cg.chunk_size.astype(np.int)
-
     ret_dicts = []
     for coord_id in coord_ids:
         chunk_coord = coord_id * chunk_size
@@ -183,70 +179,24 @@ def _l2cache_thread(args):
         )
 
     comb_ret_dict = collections.defaultdict(list)
-
     for ret_dict in ret_dicts:
         for k in ret_dict:
             comb_ret_dict[k].extend(ret_dict[k])
-
-    if storage_path is not None and len(comb_ret_dict) > 0:
-        for k in comb_ret_dict:
-            np.save(f"{storage_path}/{worker_id}_{k}.npy", comb_ret_dict[k])
-    else:
-        return comb_ret_dict
+    print(comb_ret_dict)
+    return comb_ret_dict
 
 
-def run_l2cache_preproc(
-    cg_table_id, cv_path, storage_path, timestamp=None, block_size=100, n_threads=50
-):
-
+def run_l2cache_preproc(cg_table_id, cv_path, timestamp=None):
     cg = chunkedgraph.ChunkedGraph(cg_table_id)
-
-    if not os.path.exists(storage_path):
-        os.makedirs(storage_path)
-
-    with open(f"{storage_path}/info.json") as f:
-        json.dump(
-            {
-                "timestamp": timestamp,
-                "cg_table_id": cg_table_id,
-                "cv_path": cv_path,
-                "block_size": block_size,
-            },
-            f,
-        )
-
-    cg_info = cg.get_serialized_info()
-    if "credentials" in cg_info:
-        del cg_info["credentials"]
 
     bbox = np.array(cg.cv.bounds.to_list())
     dataset_size = bbox[3:] - bbox[:3]
     dataset_csize = np.ceil(dataset_size / cg.chunk_size).astype(np.int)
 
-    multi_args = []
     coord_ids = []
     for chunk_x in range(0, dataset_csize[0]):
         for chunk_y in range(0, dataset_csize[1]):
             for chunk_z in range(0, dataset_csize[2]):
                 coord_ids.append([chunk_x, chunk_y, chunk_z])
-
-                if len(coord_ids) >= block_size:
-                    multi_args.append(
-                        [
-                            len(multi_args),
-                            cg_info,
-                            cv_path,
-                            coord_ids,
-                            timestamp,
-                            storage_path,
-                        ]
-                    )
-                    coord_ids = []
-
-    multi_args = multi_args[:20]
-    if n_threads == 1:
-        mu.multithread_func(_l2cache_thread, multi_args, n_threads=1, debug=True)
-    else:
-        mu.multisubprocess_func(
-            _l2cache_thread, multi_args, n_threads=n_threads, package_name="pcgl2cache"
-        )
+    print(len(coord_ids))
+    return _l2cache_thread(cg, cv_path, coord_ids[:20], timestamp)

@@ -22,7 +22,7 @@ BigTableConfig = namedtuple(
 )
 
 
-def get_client_info(
+def get_client_config(
     project: str = None,
     instance: str = None,
     admin: bool = False,

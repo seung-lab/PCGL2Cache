@@ -18,8 +18,8 @@ def get_default_client_info():
     """
 
     # TODO make dynamic after multiple platform support is added
-    from .bigtable import get_client_info as get_bigtable_client_info
+    from .bigtable import get_client_config as get_bigtable_client_config
 
     return BackendClientInfo(
-        CONFIG=get_bigtable_client_info(admin=True, read_only=False)
+        CONFIG=get_bigtable_client_config(admin=True, read_only=False)
     )

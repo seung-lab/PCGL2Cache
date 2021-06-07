@@ -172,8 +172,7 @@ def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
     )
     chunk_size = cg.chunk_size.astype(np.int)
     ret_dicts = []
-    for coord_id in coord_ids:
-        chunk_coord = coord_id * chunk_size
+    for chunk_coord in coord_ids:
         ret_dicts.append(
             download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
         )
@@ -193,10 +192,9 @@ def run_l2cache_preproc(cg_table_id, cv_path, timestamp=None):
     dataset_size = bbox[3:] - bbox[:3]
     dataset_csize = np.ceil(dataset_size / cg.chunk_size).astype(np.int)
 
-    coord_ids = []
-    for chunk_x in range(0, dataset_csize[0]):
-        for chunk_y in range(0, dataset_csize[1]):
-            for chunk_z in range(0, dataset_csize[2]):
-                coord_ids.append([chunk_x, chunk_y, chunk_z])
-    print(len(coord_ids))
-    return _l2cache_thread(cg, cv_path, coord_ids[:20], timestamp)
+    coord_ids = [[98, 61, 11]]
+    # for chunk_x in range(0, dataset_csize[0]):
+    #     for chunk_y in range(0, dataset_csize[1]):
+    #         for chunk_z in range(0, dataset_csize[2]):
+    #             coord_ids.append([chunk_x, chunk_y, chunk_z])
+    return _l2cache_thread(cg, cv_path, coord_ids, timestamp)

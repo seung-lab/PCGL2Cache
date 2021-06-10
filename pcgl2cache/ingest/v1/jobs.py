@@ -4,7 +4,7 @@ from typing import Sequence
 import numpy as np
 
 from ..utils import chunk_id_str
-from .manager import IngestionManager
+from ..manager import IngestionManager
 from pychunkedgraph.backend import ChunkedGraphMeta
 
 
@@ -34,21 +34,21 @@ def enqueue_atomic_tasks(imanager: IngestionManager):
             print(f"Sleeping {imanager.config.CLUSTER.ATOMIC_Q_INTERVAL}s...")
             sleep(imanager.config.CLUSTER.ATOMIC_Q_INTERVAL)
         atomic_queue.enqueue(
-            _create_atomic_chunk,
+            _ingest_atomic_chunk,
             job_id=chunk_id_str(2, chunk_coord),
-            job_timeout="6m",
+            job_timeout="2m",
             result_ttl=0,
-            args=(imanager.get_serialized_info(pickled=True), chunk_coord),
+            args=(imanager.serialize_info(pickled=True), chunk_coord),
         )
 
 
-def _create_atomic_chunk(im_info: str, coord: Sequence[int]):
-    """Creates single atomic chunk"""
-    from .ingestion import create_atomic_chunk_helper
-
+def _ingest_atomic_chunk(im_info: str, coord: Sequence[int]):
     imanager = IngestionManager.from_pickle(im_info)
     coord = np.array(list(coord), dtype=np.int)
-    create_atomic_chunk_helper(ChunkTask(imanager.cg_meta, coord), imanager)
+
+    cv_path = "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31"
+    run_l2cache_preproc(imanager.cg.table_id, cv_path)
+
     _post_task_completion(imanager, 2, coord)
 
 

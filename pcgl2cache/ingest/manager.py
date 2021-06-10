@@ -7,28 +7,22 @@ from collections import defaultdict
 from cloudvolume import CloudVolume
 
 from . import IngestConfig
-from pychunkedgraph.backend import ChunkedGraphMeta
 
 
-def _get_cg(cg_meta):
+def _get_cg(graph_id):
     from os import environ
 
     if environ.get("CHUNKEDGRAPH_VERSION", "1") == "1":
         from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 
-        return ChunkedGraph(
-            cg_meta.graph_config.graph_id,
-            project_id=cg_meta.bigtable_config.project_id,
-            instance_id=cg_meta.bigtable_config.instance_id,
-            meta=cg_meta,
-        )
+        return ChunkedGraph(graph_id)
     from pychunkedgraph.graph import ChunkedGraph
 
-    return ChunkedGraph(meta=cg_meta)
+    return ChunkedGraph(graph_id=graph_id)
 
 
 class IngestionManager:
-    def __init__(self, config: IngestConfig, cg_meta: ChunkedGraphMeta):
+    def __init__(self, config: IngestConfig, cg_meta):
         self._config = config
         self._cg = None
         self._cg_meta = cg_meta

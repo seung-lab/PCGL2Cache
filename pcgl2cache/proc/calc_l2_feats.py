@@ -173,6 +173,7 @@ def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
     chunk_size = cg.chunk_size.astype(np.int)
     ret_dicts = []
     for chunk_coord in coord_ids:
+        chunk_coord = chunk_coord * chunk_size
         ret_dicts.append(
             download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
         )
@@ -181,7 +182,6 @@ def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
     for ret_dict in ret_dicts:
         for k in ret_dict:
             comb_ret_dict[k].extend(ret_dict[k])
-    print(comb_ret_dict)
     return comb_ret_dict
 
 

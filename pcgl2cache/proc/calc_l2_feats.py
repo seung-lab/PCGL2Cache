@@ -1,15 +1,14 @@
-import os
 import fastremap
-import edt
-import collections
-import cloudvolume
+from edt import edt
+from collections import Counter
+from collections import defaultdict
+
 import numpy as np
 from sklearn import decomposition
-import datetime
-import json
-from pychunkedgraph.backend import chunkedgraph
 
-from multiwrapper import multiprocessing_utils as mu
+import warnings
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
@@ -52,7 +51,7 @@ def dist_weight(cv, coords):
 
 
 def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
-    vol_dt = edt.edt(
+    vol_dt = edt(
         vol_l2,
         anisotropy=cv.resolution,
         black_border=False,
@@ -140,9 +139,9 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     y_area = np.product(cv.resolution[[0, 2]])
     z_area = np.product(cv.resolution[[0, 1]])
 
-    x_dict = collections.Counter(dict(zip(u_x, c_x * x_area)))
-    y_dict = collections.Counter(dict(zip(u_y, c_y * y_area)))
-    z_dict = collections.Counter(dict(zip(u_z, c_z * z_area)))
+    x_dict = Counter(dict(zip(u_x, c_x * x_area)))
+    y_dict = Counter(dict(zip(u_y, c_y * y_area)))
+    z_dict = Counter(dict(zip(u_z, c_z * z_area)))
 
     area_dict = x_dict + y_dict + z_dict
     areas = np.array([area_dict[l2_id] for l2_id in l2_ids])
@@ -166,35 +165,38 @@ def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
     return calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict)
 
 
-def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
-    cv = cloudvolume.CloudVolume(
+def _l2cache_thread(cg, cv, chunk_coord, timestamp):
+    chunk_size = cg.chunk_size.astype(np.int)
+    chunk_coord = chunk_coord * chunk_size
+    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
+
+
+def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
+    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
+    from cloudvolume import CloudVolume
+
+    cg = ChunkedGraph(cg_table_id)
+    cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    chunk_size = cg.chunk_size.astype(np.int)
-    ret_dicts = []
-    for chunk_coord in coord_ids:
-        chunk_coord = chunk_coord * chunk_size
-        ret_dicts.append(
-            download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
-        )
+    return _l2cache_thread(cg, cv, chunk_coord, timestamp)
 
-    comb_ret_dict = collections.defaultdict(list)
+
+def run_l2cache_batch(cg_table_id, cv_path, chunk_coords, timestamp=None):
+    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
+    from cloudvolume import CloudVolume
+
+    cg = ChunkedGraph(cg_table_id)
+    cv = CloudVolume(
+        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
+    )
+
+    ret_dicts = []
+    for chunk_coord in chunk_coords:
+        ret_dicts.append(_l2cache_thread(cg, cv, chunk_coord, timestamp))
+
+    comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:
         for k in ret_dict:
             comb_ret_dict[k].extend(ret_dict[k])
     return comb_ret_dict
-
-
-def run_l2cache_preproc(cg_table_id, cv_path, timestamp=None):
-    cg = chunkedgraph.ChunkedGraph(cg_table_id)
-
-    bbox = np.array(cg.cv.bounds.to_list())
-    dataset_size = bbox[3:] - bbox[:3]
-    dataset_csize = np.ceil(dataset_size / cg.chunk_size).astype(np.int)
-
-    coord_ids = [[98, 61, 11]]
-    # for chunk_x in range(0, dataset_csize[0]):
-    #     for chunk_y in range(0, dataset_csize[1]):
-    #         for chunk_z in range(0, dataset_csize[2]):
-    #             coord_ids.append([chunk_x, chunk_y, chunk_z])
-    return _l2cache_thread(cg, cv_path, coord_ids, timestamp)

@@ -46,11 +46,10 @@ def enqueue_atomic_tasks(imanager: IngestionManager, cv_path: str):
         )
 
 
-def _ingest_atomic_chunk(im_info: str, cv_path: str, coord: Sequence[int]):
+def _ingest_atomic_chunk(im_info: str, cv_path: str, chunk_coord: Sequence[int]):
+    from ...proc.calc_l2_feats import run_l2cache
+
     imanager = IngestionManager.from_pickle(im_info)
-    coord = np.array(list(coord), dtype=np.int)
-
-    cv_path = "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31"
-    run_l2cache_preproc(imanager.cg.table_id, cv_path)
-
-    _post_task_completion(imanager, 2, coord)
+    chunk_coord = np.array(list(chunk_coord), dtype=np.int)
+    run_l2cache(imanager.cg.table_id, cv_path, chunk_coord)
+    _post_task_completion(imanager, 2, chunk_coord)

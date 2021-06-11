@@ -175,6 +175,8 @@ def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
     from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
+    chunk_coord = np.array(list(chunk_coord), dtype=int)
+
     cg = ChunkedGraph(cg_table_id)
     cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
@@ -182,18 +184,10 @@ def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
     return _l2cache_thread(cg, cv, chunk_coord, timestamp)
 
 
-def run_l2cache_batch(cg_table_id, cv_path, chunk_coords, timestamp=None):
-    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
-    from cloudvolume import CloudVolume
-
-    cg = ChunkedGraph(cg_table_id)
-    cv = CloudVolume(
-        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
-    )
-
+def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
     ret_dicts = []
     for chunk_coord in chunk_coords:
-        ret_dicts.append(_l2cache_thread(cg, cv, chunk_coord, timestamp))
+        ret_dicts.append(run_l2cache(table, cv_path, chunk_coord, timestamp))
 
     comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:

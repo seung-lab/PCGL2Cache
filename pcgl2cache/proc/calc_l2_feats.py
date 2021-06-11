@@ -10,6 +10,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
+from ..client import BigTableClient
+
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     bbox = np.array(cv.bounds.to_list())
@@ -51,6 +53,8 @@ def dist_weight(cv, coords):
 
 
 def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
+    from . import attributes
+
     vol_dt = edt(
         vol_l2,
         anisotropy=cv.resolution,
@@ -147,14 +151,14 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     areas = np.array([area_dict[l2_id] for l2_id in l2_ids])
 
     return {
-        "l2id": fastremap.remap(l2_ids, l2_dict).astype(np.uint64),
-        "size_nm3": l2_sizes.astype(np.uint32),
-        "area_nm2": areas.astype(np.uint32),
-        "max_dt_nm": l2_max_dts.astype(np.uint16),
-        "mean_dt_nm": l2_mean_dts.astype(np.float16),
-        "rep_coord_nm": l2_max_scaled_coords.astype(np.uint64),
-        "chunk_intersect_count": l2_chunk_intersects.astype(np.uint16),
-        "pca_comp": l2_pca_comps.astype(np.float16),
+        "l2id": fastremap.remap(l2_ids, l2_dict).astype(attributes.UINT64.type),
+        "size_nm3": l2_sizes.astype(attributes.UINT32.type),
+        "area_nm2": areas.astype(attributes.UINT32.type),
+        "max_dt_nm": l2_max_dts.astype(attributes.UINT16.type),
+        "mean_dt_nm": l2_mean_dts.astype(attributes.FLOAT16.type),
+        "rep_coord_nm": l2_max_scaled_coords.astype(attributes.UINT64.type),
+        "chunk_intersect_count": l2_chunk_intersects.astype(attributes.UINT16.type),
+        "pca_comp": l2_pca_comps.astype(attributes.FLOAT16.type),
     }
 
 
@@ -194,3 +198,32 @@ def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
         for k in ret_dict:
             comb_ret_dict[k].extend(ret_dict[k])
     return comb_ret_dict
+
+
+def write_to_db(client: BigTableClient, result_d: dict) -> None:
+    from . import attributes
+    from ..client.serializers import serialize_uint64
+
+    entries = []
+    for tup in zip(*result_d.values()):
+        (
+            l2id,
+            size_nm3,
+            area_nm2,
+            max_dt_nm,
+            mean_dt_nm,
+            rep_coord_nm,
+            chunk_intersect_count,
+            pca_comp,
+        ) = tup
+        val_d = {
+            attributes.SIZE_NM3: size_nm3,
+            attributes.AREA_NM2: area_nm2,
+            attributes.MAX_DT_NM: max_dt_nm,
+            attributes.MEAN_DT_NM: mean_dt_nm,
+            attributes.REP_COORD_NM: rep_coord_nm,
+            attributes.CHUNK_INTERSECT_COUNT: chunk_intersect_count,
+            attributes.PCA: pca_comp,
+        }
+        entries.append(client.mutate_row(serialize_uint64(l2id), val_d))
+    client.write(entries)

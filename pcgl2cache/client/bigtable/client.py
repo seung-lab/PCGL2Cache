@@ -241,6 +241,10 @@ class Client(BTClient, SimpleClient):
             for column, cell_entries in column_dict.items():
                 for cell_entry in cell_entries:
                     cell_entry.value = column.deserialize(cell_entry.value)
+            _column_dict = {}
+            for column, cell_entries in column_dict.items():
+                _column_dict[column.key] = column_dict[column]
+            rows[row_key] = _column_dict
             # If no column array was requested, reattach single column's values directly to the row
             if isinstance(columns, attributes.Attribute):
                 rows[row_key] = cell_entries

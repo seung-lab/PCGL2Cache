@@ -15,10 +15,10 @@ ingest_cli = AppGroup("ingest")
 
 
 @ingest_cli.command("v1")
-@click.argument("graph_id", type=str)
+@click.argument("table_id", type=str)
 @click.argument("cv_path", type=str)
 @click.option("--test", is_flag=True)
-def ingest_graph(graph_id: str, cv_path: str, test: bool):
+def ingest_graph(table_id: str, cv_path: str, test: bool):
     """
     Main ingest command
     Takes ingest config from a yaml file and queues atomic tasks
@@ -27,7 +27,7 @@ def ingest_graph(graph_id: str, cv_path: str, test: bool):
     from .v1.jobs import enqueue_atomic_tasks
 
     enqueue_atomic_tasks(
-        IngestionManager(IngestConfig(TEST_RUN=test), graph_id), cv_path
+        IngestionManager(IngestConfig(TEST_RUN=test), table_id), cv_path
     )
 
 

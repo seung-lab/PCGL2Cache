@@ -12,8 +12,6 @@ from flask.logging import default_handler
 from flask_cors import CORS
 from rq import Queue
 
-from pychunkedgraph.logging import jsonformatter
-
 from . import config
 
 
@@ -61,11 +59,6 @@ def configure_app(app):
     # handler = logging.FileHandler(app.config['LOGGING_LOCATION'])
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(app.config["LOGGING_LEVEL"])
-    formatter = jsonformatter.JsonFormatter(
-        fmt=app.config["LOGGING_FORMAT"], datefmt=app.config["LOGGING_DATEFORMAT"]
-    )
-    formatter.converter = time.gmtime
-    handler.setFormatter(formatter)
     app.logger.removeHandler(default_handler)
     app.logger.addHandler(handler)
     app.logger.setLevel(app.config["LOGGING_LEVEL"])

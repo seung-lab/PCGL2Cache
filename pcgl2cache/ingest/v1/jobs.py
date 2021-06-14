@@ -29,8 +29,8 @@ def enqueue_atomic_tasks(imanager: IngestionManager, cv_path: str):
     np.random.shuffle(chunk_coords)
 
     if imanager.config.TEST_RUN:
-        mid = len(chunk_coords) / 2
-        chunk_coords = chunk_coords[mid : mid + 10]
+        mid = len(chunk_coords) // 2
+        chunk_coords = chunk_coords[mid : mid + 100]
 
     chunked_jobs = chunked(chunk_coords, 10)
 
@@ -60,8 +60,11 @@ def _ingest_chunk(im_info: str, cv_path: str, chunk_coord: Sequence[int]):
 
 def _ingest_chunks(im_info: str, cv_path: str, chunk_coords: Sequence[Sequence[int]]):
     from ...proc.calc_l2_feats import run_l2cache_batch
+    from ...proc.calc_l2_feats import write_to_db
+    from ...client import BigTableClient
 
     imanager = IngestionManager.from_pickle(im_info)
-    run_l2cache_batch(imanager.cg.table_id, cv_path, chunk_coords)
+    r = run_l2cache_batch(imanager.cg.table_id, cv_path, chunk_coords)
+    write_to_db(BigTableClient(imanager.cache_id), r)
     for chunk_coord in chunk_coords:
         _post_task_completion(imanager, 2, chunk_coord)

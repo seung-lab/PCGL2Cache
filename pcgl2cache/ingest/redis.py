@@ -11,7 +11,7 @@ from rq import Queue
 # REDIS_SERVICE_HOST and REDIS_SERVICE_PORT are added by Kubernetes
 REDIS_HOST = os.environ.get("REDIS_SERVICE_HOST", "localhost")
 REDIS_PORT = os.environ.get("REDIS_SERVICE_PORT", "6379")
-REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "dev")
+REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
 REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
 
 keys_fields = ("INGESTION_MANAGER", "ATOMIC_HASH_FINISHED")

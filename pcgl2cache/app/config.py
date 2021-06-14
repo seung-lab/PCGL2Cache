@@ -32,7 +32,7 @@ class DockerDevelopmentConfig(DevelopmentConfig):
     USE_REDIS_JOBS = True
     REDIS_HOST = os.environ.get("REDIS_SERVICE_HOST", "localhost")
     REDIS_PORT = os.environ.get("REDIS_SERVICE_PORT", "6379")
-    REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "dev")
+    REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
     REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
 
 

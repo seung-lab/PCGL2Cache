@@ -1,8 +1,9 @@
 import os
+
 # This is for monitoring rq with supervisord
 # For the flask app use a config class
 
-from pychunkedgraph.utils.redis import REDIS_URL
+from pcgl2cache.ingest.redis import REDIS_URL
 
 # Queues to listen on
 QUEUES = ["atomic"]

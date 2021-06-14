@@ -14,7 +14,8 @@ _cluster_ingest_config_fields = (
 _cluster_ingest_defaults = (
     REDIS_URL,
     False,
-    "l2cache",
+    10,
+    "atomic",
     250000,
     60,
 )

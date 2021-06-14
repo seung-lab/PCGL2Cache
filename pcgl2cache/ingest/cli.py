@@ -15,30 +15,33 @@ ingest_cli = AppGroup("ingest")
 
 
 @ingest_cli.command("v1")
-@click.argument("table_id", type=str)
+@click.argument("cache_id", type=str)
+@click.argument("graph_id", type=str)
 @click.argument("cv_path", type=str)
 @click.option("--test", is_flag=True)
-def ingest_graph(table_id: str, cv_path: str, test: bool):
+def ingest_graph(cache_id: str, graph_id: str, cv_path: str, test: bool):
     """
     Main ingest command
     Takes ingest config from a yaml file and queues atomic tasks
     """
     from . import IngestConfig
+    from . import ClusterIngestConfig
     from .v1.jobs import enqueue_atomic_tasks
 
     enqueue_atomic_tasks(
-        IngestionManager(IngestConfig(TEST_RUN=test), table_id), cv_path
+        IngestionManager(
+            IngestConfig(CLUSTER=ClusterIngestConfig(), TEST_RUN=test),
+            cache_id,
+            graph_id,
+        ),
+        cv_path,
     )
 
 
 @ingest_cli.command("status")
 def ingest_status():
     redis = get_redis_connection()
-    imanager = IngestionManager.from_pickle(redis.get(r_keys.INGESTION_MANAGER))
-    for layer in range(2, imanager.cg_meta.layer_count + 1):
-        layer_count = redis.hlen(f"{layer}c")
-        print(f"{layer}\t: {layer_count}")
-    print(imanager.cg_meta.layer_chunk_counts)
+    print(redis.hlen("2c"))
 
 
 def init_ingest_cmds(app):

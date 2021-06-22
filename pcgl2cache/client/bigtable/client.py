@@ -21,7 +21,7 @@ from ..base import SimpleClient
 class Client(BTClient, SimpleClient):
     def __init__(
         self,
-        table_id: str,
+        table_id: str = None,
         config: BigTableConfig = BigTableConfig(),
     ):
         if config.CREDENTIALS:
@@ -38,36 +38,38 @@ class Client(BTClient, SimpleClient):
                 admin=config.ADMIN,
             )
         self._instance = self.instance(config.INSTANCE)
-        self._table = self._instance.table(table_id)
-        self._table_meta = {}
-        if self._table.exists():
-            self._table_meta = self.read_metadata()
+        self._table_meta = None
+        if table_id is not None:
+            self._table = self._instance.table(table_id)
 
     @property
     def meta(self) -> typing.Any:
+        if self._table_meta is None:
+            self._table_meta = self.read_metadata()
         return self._table_meta
 
-    def create_column_families(
-        self, families: typing.Iterable[typing.Tuple[str, int]]
-    ) -> None:
-        """
-        Creates column families for a table.
-        Family '0' is created by default to store metadata.
-        """
-        for family in families:
-            name, version = family
-            if version is None:
-                self._table.column_family(name).create()
-                continue
-            self._table.column_family(name, gc_rule=MaxVersionsGCRule(version)).create()
+    @property
+    def table_id(self) -> str:
+        return self._table.table_id
 
-    def create_table(self, meta: typing.Any = {}) -> None:
-        """Initialize the graph and store associated meta."""
+    def create_table(self, table_id: str, meta: typing.Any = {}) -> None:
+        """Initialize a table and store associated meta."""
+        self._table = self._instance.table(table_id)
         if self._table.exists():
             ValueError(f"{self._table.table_id} already exists.")
         self._table.create()
         self._table.column_family("0").create()
         self.write_metadata(meta)
+
+    def create_column_family(self, name: str, max_version: int = None) -> None:
+        """
+        Creates column families for a table.
+        Family '0' is created by default to store metadata.
+        """
+        if max_version is None:
+            self._table.column_family(name).create()
+            return
+        self._table.column_family(name, gc_rule=MaxVersionsGCRule(max_version)).create()
 
     def write_metadata(self, meta: typing.Any) -> None:
         self._table_meta = meta
@@ -91,12 +93,12 @@ class Client(BTClient, SimpleClient):
         start_time=None,
         end_time=None,
         end_time_inclusive: bool = False,
-        key_serializer: serializers.Serializer = serializers.String,
+        key_serializer: serializers.Serializer = serializers.UInt64String(),
     ):
         """
         Read entries and their attributes.
         Accepts a range of keys or specific keys.
-        Custom serializers can be used, `serializers.String` is the default.
+        Custom serializers can be used, `serializers.UInt64String()` is the default.
         """
         rows = self._read_byte_rows(
             start_key=key_serializer.serialize(start_key)
@@ -121,7 +123,7 @@ class Client(BTClient, SimpleClient):
         start_time=None,
         end_time=None,
         end_time_inclusive: bool = False,
-        key_serializer: serializers.Serializer = serializers.String,
+        key_serializer: serializers.Serializer = serializers.UInt64String(),
     ) -> typing.Union[
         typing.Dict[attributes.Attribute, typing.List[Cell]],
         typing.List[Cell],
@@ -239,6 +241,10 @@ class Client(BTClient, SimpleClient):
             for column, cell_entries in column_dict.items():
                 for cell_entry in cell_entries:
                     cell_entry.value = column.deserialize(cell_entry.value)
+            _column_dict = {}
+            for column, cell_entries in column_dict.items():
+                _column_dict[column.key] = column_dict[column]
+            rows[row_key] = _column_dict
             # If no column array was requested, reattach single column's values directly to the row
             if isinstance(columns, attributes.Attribute):
                 rows[row_key] = cell_entries

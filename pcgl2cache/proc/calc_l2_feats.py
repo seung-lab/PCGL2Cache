@@ -1,15 +1,16 @@
-import os
 import fastremap
-import edt
-import collections
-import cloudvolume
+from edt import edt
+from collections import Counter
+from collections import defaultdict
+
 import numpy as np
 from sklearn import decomposition
-import datetime
-import json
-from pychunkedgraph.backend import chunkedgraph
 
-from multiwrapper import multiprocessing_utils as mu
+import warnings
+
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+from ..client import BigTableClient
 
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
@@ -52,7 +53,9 @@ def dist_weight(cv, coords):
 
 
 def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
-    vol_dt = edt.edt(
+    from . import attributes
+
+    vol_dt = edt(
         vol_l2,
         anisotropy=cv.resolution,
         black_border=False,
@@ -140,22 +143,22 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     y_area = np.product(cv.resolution[[0, 2]])
     z_area = np.product(cv.resolution[[0, 1]])
 
-    x_dict = collections.Counter(dict(zip(u_x, c_x * x_area)))
-    y_dict = collections.Counter(dict(zip(u_y, c_y * y_area)))
-    z_dict = collections.Counter(dict(zip(u_z, c_z * z_area)))
+    x_dict = Counter(dict(zip(u_x, c_x * x_area)))
+    y_dict = Counter(dict(zip(u_y, c_y * y_area)))
+    z_dict = Counter(dict(zip(u_z, c_z * z_area)))
 
     area_dict = x_dict + y_dict + z_dict
     areas = np.array([area_dict[l2_id] for l2_id in l2_ids])
 
     return {
-        "l2id": fastremap.remap(l2_ids, l2_dict).astype(np.uint64),
-        "size_nm3": l2_sizes.astype(np.uint32),
-        "area_nm2": areas.astype(np.uint32),
-        "max_dt_nm": l2_max_dts.astype(np.uint16),
-        "mean_dt_nm": l2_mean_dts.astype(np.float16),
-        "rep_coord_nm": l2_max_scaled_coords.astype(np.uint64),
-        "chunk_intersect_count": l2_chunk_intersects.astype(np.uint16),
-        "pca_comp": l2_pca_comps.astype(np.float16),
+        "l2id": fastremap.remap(l2_ids, l2_dict).astype(attributes.UINT64.type),
+        "size_nm3": l2_sizes.astype(attributes.UINT32.type),
+        "area_nm2": areas.astype(attributes.UINT32.type),
+        "max_dt_nm": l2_max_dts.astype(attributes.UINT16.type),
+        "mean_dt_nm": l2_mean_dts.astype(attributes.FLOAT16.type),
+        "rep_coord_nm": l2_max_scaled_coords.astype(attributes.UINT64.type),
+        "chunk_intersect_count": l2_chunk_intersects.astype(attributes.UINT16.type),
+        "pca_comp": l2_pca_comps.astype(attributes.FLOAT16.type),
     }
 
 
@@ -166,37 +169,61 @@ def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
     return calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict)
 
 
-def _l2cache_thread(cg, cv_path, coord_ids, timestamp):
-    cv = cloudvolume.CloudVolume(
+def _l2cache_thread(cg, cv, chunk_coord, timestamp):
+    chunk_size = cg.chunk_size.astype(np.int)
+    chunk_coord = chunk_coord * chunk_size
+    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
+
+
+def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
+    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
+    from cloudvolume import CloudVolume
+
+    chunk_coord = np.array(list(chunk_coord), dtype=int)
+
+    cg = ChunkedGraph(cg_table_id)
+    cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    chunk_size = cg.chunk_size.astype(np.int)
-    ret_dicts = []
-    for coord_id in coord_ids:
-        chunk_coord = coord_id * chunk_size
-        ret_dicts.append(
-            download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
-        )
+    return _l2cache_thread(cg, cv, chunk_coord, timestamp)
 
-    comb_ret_dict = collections.defaultdict(list)
+
+def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
+    ret_dicts = []
+    for chunk_coord in chunk_coords:
+        ret_dicts.append(run_l2cache(table, cv_path, chunk_coord, timestamp))
+
+    comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:
         for k in ret_dict:
             comb_ret_dict[k].extend(ret_dict[k])
-    print(comb_ret_dict)
     return comb_ret_dict
 
 
-def run_l2cache_preproc(cg_table_id, cv_path, timestamp=None):
-    cg = chunkedgraph.ChunkedGraph(cg_table_id)
+def write_to_db(client: BigTableClient, result_d: dict) -> None:
+    from . import attributes
+    from ..client.serializers import serialize_uint64
 
-    bbox = np.array(cg.cv.bounds.to_list())
-    dataset_size = bbox[3:] - bbox[:3]
-    dataset_csize = np.ceil(dataset_size / cg.chunk_size).astype(np.int)
-
-    coord_ids = []
-    for chunk_x in range(0, dataset_csize[0]):
-        for chunk_y in range(0, dataset_csize[1]):
-            for chunk_z in range(0, dataset_csize[2]):
-                coord_ids.append([chunk_x, chunk_y, chunk_z])
-    print(len(coord_ids))
-    return _l2cache_thread(cg, cv_path, coord_ids[:20], timestamp)
+    entries = []
+    for tup in zip(*result_d.values()):
+        (
+            l2id,
+            size_nm3,
+            area_nm2,
+            max_dt_nm,
+            mean_dt_nm,
+            rep_coord_nm,
+            chunk_intersect_count,
+            pca_comp,
+        ) = tup
+        val_d = {
+            attributes.SIZE_NM3: size_nm3,
+            attributes.AREA_NM2: area_nm2,
+            attributes.MAX_DT_NM: max_dt_nm,
+            attributes.MEAN_DT_NM: mean_dt_nm,
+            attributes.REP_COORD_NM: rep_coord_nm,
+            attributes.CHUNK_INTERSECT_COUNT: chunk_intersect_count,
+            attributes.PCA: pca_comp,
+        }
+        entries.append(client.mutate_row(serialize_uint64(l2id), val_d))
+    client.write(entries)

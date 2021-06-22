@@ -12,14 +12,7 @@ from flask.logging import default_handler
 from flask_cors import CORS
 from rq import Queue
 
-from pychunkedgraph.logging import jsonformatter
-
 from . import config
-from .meshing.legacy.routes import bp as meshing_api_legacy
-from .meshing.v1.routes import bp as meshing_api_v1
-from .segmentation.legacy.routes import bp as segmentation_api_legacy
-from .segmentation.v1.routes import bp as segmentation_api_v1
-from .segmentation.generic.routes import bp as generic_api
 
 
 class CustomJsonEncoder(json.JSONEncoder):
@@ -51,9 +44,6 @@ def create_app(test_config=None):
 
     if test_config is not None:
         app.config.update(test_config)
-
-    app.register_blueprint(pcgl2cache_api_v1)
-
     return app
 
 
@@ -69,22 +59,17 @@ def configure_app(app):
     # handler = logging.FileHandler(app.config['LOGGING_LOCATION'])
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(app.config["LOGGING_LEVEL"])
-    formatter = jsonformatter.JsonFormatter(
-        fmt=app.config["LOGGING_FORMAT"], datefmt=app.config["LOGGING_DATEFORMAT"]
-    )
-    formatter.converter = time.gmtime
-    handler.setFormatter(formatter)
     app.logger.removeHandler(default_handler)
     app.logger.addHandler(handler)
     app.logger.setLevel(app.config["LOGGING_LEVEL"])
     app.logger.propagate = False
 
-    # if app.config["USE_REDIS_JOBS"]:
-    #     app.redis = redis.Redis.from_url(app.config["REDIS_URL"])
-    #     app.test_q = Queue("test", connection=app.redis)
-    #     with app.app_context():
-    #         from ..ingest.rq_cli import init_rq_cmds
-    #         from ..ingest.cli import init_ingest_cmds
+    if app.config["USE_REDIS_JOBS"]:
+        app.redis = redis.Redis.from_url(app.config["REDIS_URL"])
+        app.test_q = Queue("test", connection=app.redis)
+        with app.app_context():
+            from ..ingest.rq_cli import init_rq_cmds
+            from ..ingest.cli import init_ingest_cmds
 
-    #         init_rq_cmds(app)
-    #         init_ingest_cmds(app)
+            init_rq_cmds(app)
+            init_ingest_cmds(app)

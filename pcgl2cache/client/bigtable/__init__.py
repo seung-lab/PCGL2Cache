@@ -13,8 +13,8 @@ _bigtableconfig_fields = (
 _bigtableconfig_defaults = (
     DEFAULT_PROJECT,
     DEFAULT_INSTANCE,
-    False,
     True,
+    False,
     None,
 )
 BigTableConfig = namedtuple(

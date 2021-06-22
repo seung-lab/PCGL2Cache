@@ -6,6 +6,7 @@ grpcio>=1.36.1
 certifi>=2020.12.5
 numpy
 pandas
+scikit-learn
 google-cloud-bigtable
 google-cloud-datastore>=1.8<=2.0dev
 flask
@@ -16,6 +17,7 @@ zstandard
 redis
 rq
 fastremap
+edt
 pyyaml
 cachetools
 codecov

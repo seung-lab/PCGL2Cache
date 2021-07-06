@@ -61,7 +61,7 @@ def _ingest_chunk(im_info: str, cv_path: str, chunk_coord: Sequence[int]):
 def _ingest_chunks(im_info: str, cv_path: str, chunk_coords: Sequence[Sequence[int]]):
     from ...proc.calc_l2_feats import run_l2cache_batch
     from ...proc.calc_l2_feats import write_to_db
-    from ...client import BigTableClient
+    from kvdbclient import BigTableClient
 
     imanager = IngestionManager.from_pickle(im_info)
     r = run_l2cache_batch(imanager.cg.table_id, cv_path, chunk_coords)

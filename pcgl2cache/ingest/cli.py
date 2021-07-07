@@ -24,9 +24,13 @@ def ingest_graph(cache_id: str, graph_id: str, cv_path: str, test: bool):
     Main ingest command
     Takes ingest config from a yaml file and queues atomic tasks
     """
+    from kvdbclient import BigTableClient
     from . import IngestConfig
     from . import ClusterIngestConfig
     from .v1.jobs import enqueue_atomic_tasks
+
+    client = BigTableClient()
+    client.create_table(cache_id)
 
     enqueue_atomic_tasks(
         IngestionManager(

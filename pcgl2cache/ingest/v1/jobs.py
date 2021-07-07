@@ -30,9 +30,9 @@ def enqueue_atomic_tasks(imanager: IngestionManager, cv_path: str):
 
     if imanager.config.TEST_RUN:
         mid = len(chunk_coords) // 2
-        chunk_coords = chunk_coords[mid : mid + 100]
+        chunk_coords = chunk_coords[mid : mid + 10]
 
-    chunked_jobs = chunked(chunk_coords, 10)
+    chunked_jobs = chunked(chunk_coords, 1)
 
     for batch in chunked_jobs:
         atomic_queue = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)

@@ -16,6 +16,7 @@ class BaseConfig(object):
     CHUNKGRAPH_INSTANCE_ID = "pychunkedgraph"
     PROJECT_ID = os.environ.get("PROJECT_ID", None)
     USE_REDIS_JOBS = False
+    CHUNKGRAPH_TABLE_ID = ""
 
 
 class DevelopmentConfig(BaseConfig):

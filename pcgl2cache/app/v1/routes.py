@@ -1,25 +1,19 @@
-import io
-import pickle
-import pandas as pd
-
-from flask import make_response, current_app
-from flask import Blueprint, request
-from middle_auth_client import auth_requires_permission
-from middle_auth_client import auth_requires_admin
+from flask import request
+from flask import Blueprint
 from middle_auth_client import auth_required
+from middle_auth_client import auth_requires_permission
+from pychunkedgraph.backend.chunkedgraph_exceptions import ChunkedGraphAPIError
 
-from pcgl2cache.app.app_utils import jsonify_with_kwargs, toboolean, tobinary
-from pcgl2cache.app import common
+from ...app import common
+from ...app.utils import tobinary
+from ...app.utils import toboolean
+from ...app.utils import jsonify_with_kwargs
 
 bp = Blueprint(
     "pcgl2cache_v1",
     __name__,
     url_prefix=f"/{common.__pcgl2cache_url_prefix__}/api/v1",
 )
-
-# -------------------------------
-# ------ Access control and index
-# -------------------------------
 
 
 @bp.route("/")
@@ -35,19 +29,12 @@ def home():
     return common.home()
 
 
-# -------------------------------
-# ------ Measurements and Logging
-# -------------------------------
-
-
 @bp.before_request
-# @auth_required
 def before_request():
     return common.before_request()
 
 
 @bp.after_request
-# @auth_required
 def after_request(response):
     return common.after_request(response)
 
@@ -57,8 +44,20 @@ def unhandled_exception(e):
     return common.unhandled_exception(e)
 
 
-@bp.errorhandler(cg_exceptions.ChunkedGraphAPIError)
+@bp.errorhandler(ChunkedGraphAPIError)
 def api_exception(e):
     return common.api_exception(e)
 
 
+@bp.route("/attribute_metadata", methods=["GET"])
+def attr_metadata():
+    return jsonify_with_kwargs(common.handle_attr_metadata())
+
+
+@bp.route("/table/<table_id>/attributes", methods=["POST"])
+@auth_requires_permission("view")
+def attributes(table_id, node_id):
+    int64_as_str = request.args.get("int64_as_str", default=False, type=toboolean)
+    root_id = common.handle_attributes(table_id, node_id)
+    resp = {"root_id": root_id}
+    return jsonify_with_kwargs(resp, int64_as_str=int64_as_str)

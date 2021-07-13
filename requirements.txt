@@ -15,7 +15,7 @@ multiwrapper
 python-json-logger
 zstandard
 redis
-rq
+rq<=1.8.1
 fastremap
 edt
 pyyaml

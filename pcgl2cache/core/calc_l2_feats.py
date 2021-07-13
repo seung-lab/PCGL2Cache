@@ -10,7 +10,7 @@ import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
-from ..client import BigTableClient
+from kvdbclient import BigTableClient
 
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
@@ -176,9 +176,11 @@ def _l2cache_thread(cg, cv, chunk_coord, timestamp):
 
 
 def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
+    from datetime import datetime
     from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
+    timestamp = datetime(2019, 7, 2, 20, 51)
     chunk_coord = np.array(list(chunk_coord), dtype=int)
 
     cg = ChunkedGraph(cg_table_id)
@@ -202,7 +204,8 @@ def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
 
 def write_to_db(client: BigTableClient, result_d: dict) -> None:
     from . import attributes
-    from ..client.serializers import serialize_uint64
+    from kvdbclient.base import Entry
+    from kvdbclient.base import EntryKey
 
     entries = []
     for tup in zip(*result_d.values()):
@@ -225,5 +228,5 @@ def write_to_db(client: BigTableClient, result_d: dict) -> None:
             attributes.CHUNK_INTERSECT_COUNT: chunk_intersect_count,
             attributes.PCA: pca_comp,
         }
-        entries.append(client.mutate_row(serialize_uint64(l2id), val_d))
-    client.write(entries)
+        entries.append(Entry(EntryKey(l2id), val_d))
+    client.write_entries(entries)

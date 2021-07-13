@@ -30,9 +30,9 @@ def enqueue_atomic_tasks(imanager: IngestionManager, cv_path: str):
 
     if imanager.config.TEST_RUN:
         mid = len(chunk_coords) // 2
-        chunk_coords = chunk_coords[mid : mid + 100]
+        chunk_coords = chunk_coords[mid : mid + 10]
 
-    chunked_jobs = chunked(chunk_coords, 10)
+    chunked_jobs = chunked(chunk_coords, 1)
 
     for batch in chunked_jobs:
         atomic_queue = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
@@ -50,7 +50,7 @@ def enqueue_atomic_tasks(imanager: IngestionManager, cv_path: str):
 
 
 def _ingest_chunk(im_info: str, cv_path: str, chunk_coord: Sequence[int]):
-    from ...proc.calc_l2_feats import run_l2cache
+    from ...core.calc_l2_feats import run_l2cache
 
     imanager = IngestionManager.from_pickle(im_info)
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
@@ -59,9 +59,9 @@ def _ingest_chunk(im_info: str, cv_path: str, chunk_coord: Sequence[int]):
 
 
 def _ingest_chunks(im_info: str, cv_path: str, chunk_coords: Sequence[Sequence[int]]):
-    from ...proc.calc_l2_feats import run_l2cache_batch
-    from ...proc.calc_l2_feats import write_to_db
-    from ...client import BigTableClient
+    from ...core.calc_l2_feats import run_l2cache_batch
+    from ...core.calc_l2_feats import write_to_db
+    from kvdbclient import BigTableClient
 
     imanager = IngestionManager.from_pickle(im_info)
     r = run_l2cache_batch(imanager.cg.table_id, cv_path, chunk_coords)

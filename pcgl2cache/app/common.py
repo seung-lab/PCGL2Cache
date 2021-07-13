@@ -125,7 +125,7 @@ def api_exception(e):
 
 
 def handle_attr_metadata():
-    from ..proc import attributes
+    from ..core import attributes
 
     return {
         attr.key.decode(): str(attr.serializer.basetype)

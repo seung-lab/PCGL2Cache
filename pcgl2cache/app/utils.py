@@ -146,3 +146,13 @@ def get_username_dict(user_ids, auth_token):
         timeout=5,
     )
     return {x["id"]: x["name"] for x in users_request.json()}
+
+
+def get_registered_attributes() -> dict:
+    from ..core import attributes
+
+    attrs = {
+        attr.key.decode(): attr for attr in attributes.Attribute._attributes.values()
+    }
+    attrs.pop("meta")
+    return attrs

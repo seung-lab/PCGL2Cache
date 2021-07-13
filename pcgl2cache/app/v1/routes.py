@@ -54,10 +54,9 @@ def attr_metadata():
     return jsonify_with_kwargs(common.handle_attr_metadata())
 
 
-@bp.route("/table/<table_id>/attributes", methods=["POST"])
-@auth_requires_permission("view")
-def attributes(table_id, node_id):
-    int64_as_str = request.args.get("int64_as_str", default=False, type=toboolean)
-    root_id = common.handle_attributes(table_id, node_id)
-    resp = {"root_id": root_id}
-    return jsonify_with_kwargs(resp, int64_as_str=int64_as_str)
+@bp.route("/table/<table_id>/attributes", methods=["GET"])
+def attributes(table_id):
+    int64_as_str = request.args.get("int64_as_str", default=True, type=toboolean)
+    return jsonify_with_kwargs(
+        common.handle_attributes(table_id), int64_as_str=int64_as_str
+    )

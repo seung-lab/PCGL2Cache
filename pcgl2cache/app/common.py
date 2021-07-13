@@ -19,6 +19,8 @@ from middle_auth_client import get_usernames
 from flask import current_app, g, jsonify, make_response, request
 from pcgl2cache import __version__
 
+from .utils import get_registered_attributes
+
 __api_versions__ = [1]
 __pcgl2cache_url_prefix__ = os.environ.get("PCGL2CACHE_URL_PREFIX", "l2cache")
 
@@ -125,13 +127,25 @@ def api_exception(e):
 
 
 def handle_attr_metadata():
-    from ..core import attributes
-
     return {
-        attr.key.decode(): str(attr.serializer.basetype)
-        for attr in attributes.Attribute._attributes.values()
+        name: str(attr.serializer.basetype)
+        for name, attr in get_registered_attributes().items()
     }
 
 
-def handle_attributes():
-    pass
+def handle_attributes(table_id: str, is_binary=False):
+    # if is_binary:
+    #     node_ids = np.frombuffer(request.data, np.uint64)
+    # else:
+    #     node_ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
+
+    attributes = None
+    attribute_names = request.args.get("attribute_names")
+    if attribute_names is not None:
+        attribute_names = [x.strip() for x in attribute_names.split(",")]
+        _attributes = get_registered_attributes()
+        attributes = []
+        for name in attribute_names:
+            # assert name in _attributes
+            attributes.append(_attributes[name])
+    print(attributes)

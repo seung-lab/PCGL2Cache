@@ -40,56 +40,6 @@ def jsonify_with_kwargs(data, as_response=True, **kwargs):
         return resp
 
 
-def get_bigtable_client(config):
-    from google.cloud.bigtable import Client
-    from google.auth import default as default_creds
-
-    project_id = config.get("PROJECT_ID", None)
-    if config.get("emulate", False):
-        credentials = DoNothingCreds()
-    elif project_id is not None:
-        credentials, _ = default_creds()
-    else:
-        credentials, project_id = default_creds()
-
-    client = Client(admin=True, project=project_id, credentials=credentials)
-    return client
-
-
-def get_cg(table_id):
-    assert table_id in current_app.config["PCG_GRAPH_IDS"]
-
-    if table_id not in CACHE:
-        import logging
-        from sys import stdout
-        from time import gmtime
-        from pychunkedgraph.logging import jsonformatter
-
-        instance_id = current_app.config["CHUNKGRAPH_INSTANCE_ID"]
-        client = get_bigtable_client(current_app.config)
-
-        logger = logging.getLogger(f"{instance_id}/{table_id}")
-        logger.setLevel(current_app.config["LOGGING_LEVEL"])
-
-        # prevent duplicate logs from Flasks(?) parent logger
-        logger.propagate = False
-        handler = logging.StreamHandler(stdout)
-        handler.setLevel(current_app.config["LOGGING_LEVEL"])
-        formatter = jsonformatter.JsonFormatter(
-            fmt=current_app.config["LOGGING_FORMAT"],
-            datefmt=current_app.config["LOGGING_DATEFORMAT"],
-        )
-        formatter.converter = gmtime
-        handler.setFormatter(formatter)
-        logger.addHandler(handler)
-        # Create ChunkedGraph
-        CACHE[table_id] = chunkedgraph.ChunkedGraph(
-            table_id=table_id, instance_id=instance_id, client=client, logger=logger
-        )
-    current_app.table_id = table_id
-    return CACHE[table_id]
-
-
 def get_l2cache_client(table_id: str) -> BigTableClient:
     l2cache_map = current_app.config["DATASET_CACHE_ID_MAP"]
     assert table_id in l2cache_map, f"Dataset {table_id} does not have an L2 Cache."

@@ -18,6 +18,13 @@ class BaseConfig(object):
     USE_REDIS_JOBS = False
     CHUNKGRAPH_TABLE_ID = ""
 
+    DATASET_CACHE_ID_MAP = {}
+    _l2cache_map = os.environ.get("DATASET_CACHE_ID_MAP", "fly_v31=l2cache_fly_v31_v1")
+    _l2cache_map = _l2cache_map.split(",")
+    for mapping in _l2cache_map:
+        dataset_id, l2cache_id = [x.strip() for x in mapping.split("=")]
+        DATASET_CACHE_ID_MAP[dataset_id] = l2cache_id
+
 
 class DevelopmentConfig(BaseConfig):
     """Development configuration."""

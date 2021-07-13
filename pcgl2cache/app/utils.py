@@ -4,6 +4,7 @@ import numpy as np
 from flask import current_app, json
 from google.auth.credentials import Credentials
 
+from kvdbclient import BigTableClient
 from pychunkedgraph.backend import chunkedgraph
 
 CACHE = {}
@@ -87,6 +88,12 @@ def get_cg(table_id):
         )
     current_app.table_id = table_id
     return CACHE[table_id]
+
+
+def get_l2cache_client(table_id: str) -> BigTableClient:
+    l2cache_map = current_app.config["DATASET_CACHE_ID_MAP"]
+    assert table_id in l2cache_map, f"Dataset {table_id} does not have an L2 Cache."
+    return BigTableClient(l2cache_map[table_id])
 
 
 def toboolean(value):

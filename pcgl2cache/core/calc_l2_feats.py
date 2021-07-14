@@ -211,7 +211,7 @@ def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
     from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
-    timestamp = datetime(2019, 7, 2, 20, 51)
+    timestamp = datetime(2021, 7, 15)
     chunk_coord = np.array(list(chunk_coord), dtype=int)
 
     cg = ChunkedGraph(cg_table_id)

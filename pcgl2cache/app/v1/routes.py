@@ -56,7 +56,7 @@ def attr_metadata():
 
 @bp.route("/table/<table_id>/attributes", methods=["POST"])
 def attributes(table_id):
-    int64_as_str = request.args.get("int64_as_str", default=True, type=toboolean)
+    int64_as_str = request.args.get("int64_as_str", default=False, type=toboolean)
     return jsonify_with_kwargs(
         common.handle_attributes(table_id), int64_as_str=int64_as_str
     )

@@ -10,14 +10,17 @@ from datetime import datetime
 import requests
 
 import numpy as np
-from pytz import UTC
 import pandas as pd
-
+from pytz import UTC
 from cloudvolume import compression
 from middle_auth_client import get_usernames
 
-from flask import current_app, g, jsonify, make_response, request
-from pcgl2cache import __version__
+from flask import g
+from flask import request
+from flask import jsonify
+from flask import Blueprint
+from flask import current_app
+from flask import make_response
 
 from .utils import get_registered_attributes
 
@@ -25,7 +28,18 @@ __api_versions__ = [1]
 __pcgl2cache_url_prefix__ = os.environ.get("PCGL2CACHE_URL_PREFIX", "l2cache")
 
 
+bp = Blueprint(
+    "pcgl2cache",
+    __name__,
+    url_prefix=f"/{__pcgl2cache_url_prefix__}",
+)
+
+
+@bp.route("/")
+@bp.route("/index")
 def index():
+    from .. import __version__
+
     return f"PCGL2Cache v{__version__}"
 
 

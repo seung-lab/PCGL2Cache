@@ -15,10 +15,8 @@ from kvdbclient import BigTableClient
 
 def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     bbox = np.array(cv.bounds.to_list())
-
     vol_coord_start = bbox[:3] + chunk_coord
     vol_coord_end = vol_coord_start + chunk_size
-
     vol = cv[
         vol_coord_start[0] : vol_coord_end[0],
         vol_coord_start[1] : vol_coord_end[1],
@@ -27,22 +25,16 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
 
     sv_ids = fastremap.unique(vol)
     sv_ids = sv_ids[sv_ids != 0]
-
     if len(sv_ids) == 0:
         return vol.astype(np.uint32), {}
 
     l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
-
     u_l2_ids = fastremap.unique(l2_ids)
-
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
-
     cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
-
     fastremap.remap(
         vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
     )
-
     return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
 
 
@@ -99,6 +91,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     l2_ids = np.array(list(cmap_stack.keys()))
     l2_ids = l2_ids[l2_ids != 0]
     l2_pca_comps = []
+    l2_pca_vals = []
     for l2_id in l2_ids:
 
         # We first disentangle the compound data for the specific L2 ID
@@ -134,8 +127,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
             ).T
         else:
             coords_p = coords
-
-        l2_pca_comps.append(pca.fit(coords_p * cv.resolution).components_)
+        pca.fit(coords_p * cv.resolution)
+        l2_pca_comps.append(pca.components_)
+        l2_pca_vals.append(pca.singular_values_)
 
     # In a last step we adjust for the chunk offset.
     offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
@@ -148,6 +142,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     )
     l2_bboxs = np.array(l2_bboxs) + offset
     l2_pca_comps = np.array(l2_pca_comps)
+    l2_pca_vals = np.array(l2_pca_vals)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
 
     # Area calculations are handled seaprately and are performed by overlap through
@@ -190,6 +185,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
         "rep_coord_nm": l2_max_scaled_coords.astype(attributes.UINT64.type),
         "chunk_intersect_count": l2_chunk_intersects.astype(attributes.UINT16.type),
         "pca_comp": l2_pca_comps.astype(attributes.FLOAT16.type),
+        "pca_vals": l2_pca_vals.astype(attributes.FLOAT32.type),
     }
 
 
@@ -248,6 +244,7 @@ def write_to_db(client: BigTableClient, result_d: dict) -> None:
             rep_coord_nm,
             chunk_intersect_count,
             pca_comp,
+            pca_vals,
         ) = tup
         val_d = {
             attributes.SIZE_NM3: size_nm3,
@@ -257,6 +254,7 @@ def write_to_db(client: BigTableClient, result_d: dict) -> None:
             attributes.REP_COORD_NM: rep_coord_nm,
             attributes.CHUNK_INTERSECT_COUNT: chunk_intersect_count,
             attributes.PCA: pca_comp,
+            attributes.PCA_VAL: pca_vals,
         }
         entries.append(Entry(EntryKey(l2id), val_d))
     client.write_entries(entries)

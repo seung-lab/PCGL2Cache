@@ -185,15 +185,19 @@ def handle_attributes(table_id: str, is_binary=False):
         except KeyError:
             result[str(l2id)] = {}
             missing_l2ids.append(l2id)
-    _trigger_cache_update(missing_l2ids)
+    _trigger_cache_update(missing_l2ids, table_id, cache_client.table_id)
     return result
 
 
-def _trigger_cache_update(l2ids):
+def _trigger_cache_update(l2ids, table_id: str, l2_cache_id: str) -> None:
     import numpy as np
     from messagingclient import MessagingClient
 
     payload = np.array(l2ids, dtype=np.uint64).tobytes()
+    attributes = {
+        "table_id": table_id,
+        "l2_cache_id": l2_cache_id,
+    }
 
     c = MessagingClient()
-    c.publish("pychunkedgraph", payload)
+    c.publish("pychunkedgraph", payload, attributes)

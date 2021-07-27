@@ -50,10 +50,6 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, l2_ids):
 
     sv_ids = cg.get_children(l2_ids, flatten=True)
     sv_ids = fastremap.unique(sv_ids)
-    sv_ids = sv_ids[sv_ids != 0]
-    if len(sv_ids) == 0:
-        return vol.astype(np.uint32), {}
-
     u_l2_ids = fastremap.unique(l2_ids)
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
     cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
@@ -113,7 +109,8 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     l2_max_dts = []
     l2_mean_dts = []
     l2_sizes = []
-    l2_ids = np.array(list(cmap_stack.keys()))
+    if l2_ids is None:
+        l2_ids = np.array(list(cmap_stack.keys()))
     l2_ids = l2_ids[l2_ids != 0]
     l2_pca_comps = []
     l2_pca_vals = []

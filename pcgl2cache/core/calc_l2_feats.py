@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 from kvdbclient import BigTableClient
 
 
-def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
+def get_chunk_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     bbox = np.array(cv.bounds.to_list())
     vol_coord_start = bbox[:3] + chunk_coord
     vol_coord_end = vol_coord_start + chunk_size
@@ -29,6 +29,31 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
         return vol.astype(np.uint32), {}
 
     l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
+    u_l2_ids = fastremap.unique(l2_ids)
+    u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
+    cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
+    fastremap.remap(
+        vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
+    )
+    return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
+
+
+def get_l2_seg(cg, cv, chunk_coord, chunk_size, l2_ids):
+    bbox = np.array(cv.bounds.to_list())
+    vol_coord_start = bbox[:3] + chunk_coord
+    vol_coord_end = vol_coord_start + chunk_size
+    vol = cv[
+        vol_coord_start[0] : vol_coord_end[0],
+        vol_coord_start[1] : vol_coord_end[1],
+        vol_coord_start[2] : vol_coord_end[2],
+    ][..., 0]
+
+    sv_ids = cg.get_children(l2_ids, flatten=True)
+    sv_ids = fastremap.unique(sv_ids)
+    sv_ids = sv_ids[sv_ids != 0]
+    if len(sv_ids) == 0:
+        return vol.astype(np.uint32), {}
+
     u_l2_ids = fastremap.unique(l2_ids)
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
     cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
@@ -158,31 +183,36 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     }
 
 
-def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
-    vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
+def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids):
+    if l2_ids is None:
+        vol_l2, l2_dict = get_chunk_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
+    else:
+        vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, l2_ids)
     if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
         return {}
     return calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict)
 
 
-def _l2cache_thread(cg, cv, chunk_coord, timestamp):
+def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids):
     chunk_size = cg.chunk_size.astype(np.int)
     chunk_coord = chunk_coord * chunk_size
-    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
+    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids)
 
 
-def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
+def run_l2cache(cg_table_id, cv_path, chunk_coord=None, timestamp=None, l2_ids=None):
     from datetime import datetime
     from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
-    chunk_coord = np.array(list(chunk_coord), dtype=int)
-
     cg = ChunkedGraph(cg_table_id)
+    if chunk_coord is None:
+        assert l2_ids is not None and len(l2_ids) > 0
+        chunk_coord = cg.get_chunk_coordinates(l2_ids[0])
+    chunk_coord = np.array(list(chunk_coord), dtype=int)
     cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    return _l2cache_thread(cg, cv, chunk_coord, timestamp)
+    return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids)
 
 
 def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):

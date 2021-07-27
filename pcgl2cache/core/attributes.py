@@ -52,5 +52,5 @@ PCA = Attribute(
 PCA_VAL = Attribute(
     key=b"pca_val",
     family_id="0",
-    serializer=NumPyArray(dtype=FLOAT32, shape=(-1, 3)),
+    serializer=NumPyArray(dtype=FLOAT32, shape=(-1,)),
 )

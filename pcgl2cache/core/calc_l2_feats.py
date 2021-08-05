@@ -52,9 +52,12 @@ def dist_weight(cv, coords):
     return 1 - dists / dists.max()
 
 
-def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
+def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     from . import attributes
 
+    # First calculate eucledian distance transform for all segments
+    # Every entrie in vol_dt is the distance in nm from the closest
+    # boundary
     vol_dt = edt(
         vol_l2,
         anisotropy=cv.resolution,
@@ -62,13 +65,28 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
         parallel=1,  # number of threads, <= 0 sets to num cpu
     )
 
+    # To efficiently map measured distances from the EDT to all IDs
+    # we use `fastremap.inverse_component_map`. This function takes
+    # two equally sized volumes - the first has the IDs, the second
+    # the data we want to map. However, this function uniquenifies
+    # the data entries per ID such that we loose the size information.
+    # Additionally, we want to retain information about the locations.
+    # To enable this with one iteration of the block, we build a
+    # compound data block. Each value has 64 bits, the first 32 bits
+    # encode the EDT, the second the location as flat index. Using,
+    # float data for the edt would lead to overflows, so we first
+    # convert to uints.
     shape = np.array(vol_l2.shape)
     size = np.product(shape)
     stack = ((vol_dt.astype(np.uint64).flatten()) << 32) + np.arange(
         size, dtype=np.uint64
     )
 
+    # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
+    # encoded as described above.
     cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
+
+    # Initiliaze PCA
     pca = decomposition.PCA(3)
 
     l2_max_coords = []
@@ -82,11 +100,15 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     l2_ids = l2_ids[l2_ids != 0]
     l2_pca_comps = []
     for l2_id in l2_ids:
+
+        # We first disentangle the compound data for the specific L2 ID
+        # and transform the flat indices to 3d indices.
         l2_stack = np.array(cmap_stack[l2_id], dtype=np.uint64)
         dts = l2_stack >> 32
         idxs = l2_stack.astype(np.uint32)
         coords = np.array(np.unravel_index(np.array(idxs), vol_l2.shape)).T
 
+        # Finally, we compute statistics from the decoded data.
         max_idx = np.argmax(dts)
         l2_max_coords.append(coords[max_idx])
         l2_max_scaled_coords.append(coords[np.argmax(dts * dist_weight(cv, coords))])
@@ -98,6 +120,10 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
             [np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)]
         )
 
+        # The PCA calculation is straight-forward as long as the are sufficiently
+        # many coordinates. We observed long runtimes for very large components.
+        # Using a subset of the points in such cases proved to produce almost
+        # identical results.
         if len(coords) < 3:
             coords_p = np.concatenate([coords, coords, coords])
         elif len(coords) > 10000:
@@ -111,6 +137,7 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
 
         l2_pca_comps.append(pca.fit(coords_p * cv.resolution).components_)
 
+    # In a last step we adjust for the chunk offset.
     offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
     l2_sizes = np.array(np.array(l2_sizes) * np.product(cv.resolution))
     l2_max_dts = np.array(l2_max_dts)
@@ -123,7 +150,11 @@ def calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict):
     l2_pca_comps = np.array(l2_pca_comps)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
 
-    ## Area calculations
+    # Area calculations are handled seaprately and are performed by overlap through
+    # shifts. We shift in each dimension and calculate the overlapping segment ids.
+    # The overlapping IDs are then counted per dimension and added up after
+    # adjusting for resolution. This measurement will overestimate area slightly
+    # but smoothed measurements are ill-defined and too compute intensive.
     x_m = vol_l2[1:] != vol_l2[:-1]
     y_m = vol_l2[:, 1:] != vol_l2[:, :-1]
     z_m = vol_l2[:, :, 1:] != vol_l2[:, :, :-1]
@@ -166,7 +197,7 @@ def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
     vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
     if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
         return {}
-    return calculate_rep_coords(cv, chunk_coord, vol_l2, l2_dict)
+    return calculate_features(cv, chunk_coord, vol_l2, l2_dict)
 
 
 def _l2cache_thread(cg, cv, chunk_coord, timestamp):

@@ -13,28 +13,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 from kvdbclient import BigTableClient
 
 
-def get_l2_seg(cg, cv, chunk_coord, chunk_size, l2_ids):
-    bbox = np.array(cv.bounds.to_list())
-    vol_coord_start = bbox[:3] + chunk_coord
-    vol_coord_end = vol_coord_start + chunk_size
-    vol = cv[
-        vol_coord_start[0] : vol_coord_end[0],
-        vol_coord_start[1] : vol_coord_end[1],
-        vol_coord_start[2] : vol_coord_end[2],
-    ][..., 0]
-
-    sv_ids = cg.get_children(l2_ids, flatten=True)
-    sv_ids = fastremap.unique(sv_ids)
-    u_l2_ids = fastremap.unique(l2_ids)
-    u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
-    cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
-    fastremap.remap(
-        vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
-    )
-    return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
-
-
-def get_chunk_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
+def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=None):
     bbox = np.array(cv.bounds.to_list())
 
     vol_coord_start = bbox[:3] + chunk_coord
@@ -52,18 +31,19 @@ def get_chunk_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     if len(sv_ids) == 0:
         return vol.astype(np.uint32), {}
 
-    l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
+    _l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
+    if l2_ids is not None:
+        l2id_children_d = cg.get_children(l2_ids)
+        for _id in l2_ids:
+            mapping = dict(zip(l2id_children_d[_id], [_id] * len(l2id_children_d[_id])))
+            fastremap.remap(_l2_ids, mapping, in_place=True)
 
-    u_l2_ids = fastremap.unique(l2_ids)
-
+    u_l2_ids = fastremap.unique(_l2_ids)
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
-
-    cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
-
+    cont_ids = fastremap.remap(_l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
     fastremap.remap(
         vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
     )
-
     return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
 
 
@@ -73,7 +53,7 @@ def dist_weight(cv, coords):
     return 1 - dists / dists.max()
 
 
-def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
+def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     from . import attributes
 
     # First calculate eucledian distance transform for all segments
@@ -220,10 +200,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
 
 
 def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids):
-    if l2_ids is None:
-        vol_l2, l2_dict = get_chunk_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
-    else:
-        vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, l2_ids)
+    vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
     if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
         return {}
     return calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids)

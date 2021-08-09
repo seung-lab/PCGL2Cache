@@ -135,6 +135,8 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
         else:
             coords_p = coords
 
+        l2_pca_comps.append(pca.fit(coords_p * cv.resolution).components_)
+
     # In a last step we adjust for the chunk offset.
     offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
     l2_sizes = np.array(np.array(l2_sizes) * np.product(cv.resolution))

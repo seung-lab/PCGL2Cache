@@ -7,6 +7,7 @@ def callback(payload):
 
     l2ids = np.frombuffer(payload.data, dtype=np.uint64)
     l2ids = np.array([175137943013294114, 175137943013294118], dtype=np.uint64)
+    # l2ids = np.array([175137943013294113, 175137943013294119], dtype=np.uint64)
     table_id = payload.attributes["table_id"]
     l2_cache_id = payload.attributes["l2_cache_id"]
     print(table_id, l2_cache_id, l2ids)

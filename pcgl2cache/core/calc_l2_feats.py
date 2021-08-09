@@ -33,10 +33,14 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=None):
 
     _l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
     if l2_ids is not None:
+        mapping = {}
         l2id_children_d = cg.get_children(l2_ids)
         for _id in l2_ids:
-            mapping = dict(zip(l2id_children_d[_id], [_id] * len(l2id_children_d[_id])))
-            fastremap.remap(_l2_ids, mapping, in_place=True)
+            children = l2id_children_d[_id]
+            idx = np.where(sv_ids == children[0])[0][0]
+            parent = _l2_ids[idx]
+            mapping[parent] = _id
+        fastremap.remap(_l2_ids, mapping, in_place=True, preserve_missing_labels=True)
 
     u_l2_ids = fastremap.unique(_l2_ids)
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
@@ -86,6 +90,13 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
     # encoded as described above.
     cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
+    if l2_ids is None:
+        l2_ids = np.array(list(cmap_stack.keys()))
+        l2_ids = l2_ids[l2_ids != 0]
+    else:
+        l2_dict_reverse = {v: k for k, v in l2_dict.items()}
+        l2_ids = np.array([l2_dict_reverse[k] for k in l2_ids])
+    print(l2_ids)
 
     # Initiliaze PCA
     pca = decomposition.PCA(3)
@@ -97,12 +108,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     l2_max_dts = []
     l2_mean_dts = []
     l2_sizes = []
-    l2_ids = np.array(list(cmap_stack.keys()))
-    l2_ids = l2_ids[l2_ids != 0]
     l2_pca_comps = []
     l2_pca_vals = []
     for l2_id in l2_ids:
-
         # We first disentangle the compound data for the specific L2 ID
         # and transform the flat indices to 3d indices.
         l2_stack = np.array(cmap_stack[l2_id], dtype=np.uint64)
@@ -200,7 +208,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
 
 
 def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids):
-    vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
+    vol_l2, l2_dict = get_l2_seg(
+        cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=l2_ids
+    )
     if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
         return {}
     return calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids)

@@ -6,4 +6,5 @@ RUN mkdir -p /home/nginx/.cloudvolume/secrets && chown -R nginx /home/nginx && u
 COPY . /app
 RUN pip install pip==20.0.1 \
     && pip install --no-cache-dir --upgrade -r requirements.txt \
-    && pip install --upgrade git+https://github.com/seung-lab/KVDbClient.git@main
+    && pip install --upgrade git+https://github.com/seung-lab/KVDbClient.git@main \
+    && pip install --upgrade git+https://github.com/seung-lab/messaging-client.git@main

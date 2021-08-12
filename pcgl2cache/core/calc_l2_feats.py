@@ -37,7 +37,10 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=None):
         l2id_children_d = cg.get_children(l2_ids)
         for _id in l2_ids:
             children = l2id_children_d[_id]
-            idx = np.where(sv_ids == children[0])[0][0]
+            try:
+                idx = np.where(sv_ids == children[0])[0][0]
+            except IndexError:
+                continue
             parent = _l2_ids[idx]
             mapping[parent] = _id
         fastremap.remap(_l2_ids, mapping, in_place=True, preserve_missing_labels=True)
@@ -95,8 +98,16 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
         l2_ids = l2_ids[l2_ids != 0]
     else:
         l2_dict_reverse = {v: k for k, v in l2_dict.items()}
-        l2_ids = np.array([l2_dict_reverse[k] for k in l2_ids])
-    print(l2_ids)
+        _l2_ids = []
+        for k in l2_ids:
+            try:
+                _l2_ids.append(l2_dict_reverse[k])
+            except KeyError:
+                print(f"Unable to process L2 ID {k}")
+                continue
+        l2_ids = np.array(_l2_ids)
+        if l2_ids.size == 0:
+            return {}
 
     # Initiliaze PCA
     pca = decomposition.PCA(3)
@@ -222,12 +233,10 @@ def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids):
     return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids)
 
 
-def run_l2cache(cg_table_id, cv_path, chunk_coord=None, timestamp=None, l2_ids=None):
+def run_l2cache(cg, cv_path, chunk_coord=None, timestamp=None, l2_ids=None):
     from datetime import datetime
-    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
-    cg = ChunkedGraph(cg_table_id)
     if chunk_coord is None:
         assert l2_ids is not None and len(l2_ids) > 0
         chunk_coord = cg.get_chunk_coordinates(l2_ids[0])
@@ -238,10 +247,10 @@ def run_l2cache(cg_table_id, cv_path, chunk_coord=None, timestamp=None, l2_ids=N
     return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids)
 
 
-def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
+def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):
     ret_dicts = []
     for chunk_coord in chunk_coords:
-        ret_dicts.append(run_l2cache(table, cv_path, chunk_coord, timestamp))
+        ret_dicts.append(run_l2cache(cg, cv_path, chunk_coord, timestamp))
 
     comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:

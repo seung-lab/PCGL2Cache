@@ -7,7 +7,7 @@ import numpy as np
 
 from ..utils import chunk_id_str
 from ..manager import IngestionManager
-from pychunkedgraph.backend import ChunkedGraphMeta
+from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 
 
 def _post_task_completion(imanager: IngestionManager, layer: int, coords: np.ndarray):
@@ -63,7 +63,7 @@ def _ingest_chunk(
 
     imanager = IngestionManager.from_pickle(im_info)
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
-    run_l2cache(imanager.cg.table_id, cv_path, chunk_coord, timestamp)
+    run_l2cache(ChunkedGraph(imanager.cg.table_id), cv_path, chunk_coord, timestamp)
     _post_task_completion(imanager, 2, chunk_coord)
 
 
@@ -78,7 +78,9 @@ def _ingest_chunks(
     from kvdbclient import BigTableClient
 
     imanager = IngestionManager.from_pickle(im_info)
-    r = run_l2cache_batch(imanager.cg.table_id, cv_path, chunk_coords, timestamp)
+    r = run_l2cache_batch(
+        ChunkedGraph(imanager.cg.table_id), cv_path, chunk_coords, timestamp
+    )
     write_to_db(BigTableClient(imanager.cache_id), r)
     for chunk_coord in chunk_coords:
         _post_task_completion(imanager, 2, chunk_coord)

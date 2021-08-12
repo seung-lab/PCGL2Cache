@@ -1,6 +1,7 @@
 from typing import DefaultDict
 from typing import Iterable
 from collections import defaultdict
+from os import getenv
 
 import numpy as np
 from messagingclient import MessagingClient
@@ -16,7 +17,6 @@ def get_batches(cg: ChunkedGraph, l2ids: Iterable) -> DefaultDict:
 
 
 def callback(payload):
-    from os import getenv
     from kvdbclient import BigTableClient
     from pcgl2cache.core.calc_l2_feats import run_l2cache
     from pcgl2cache.core.calc_l2_feats import write_to_db
@@ -47,4 +47,5 @@ def callback(payload):
 
 
 c = MessagingClient()
-c.consume("test", callback)
+l2cache_update_topic = getenv("L2CACHE_UPDATE_TOPIC", "test")
+c.consume(l2cache_update_topic, callback)

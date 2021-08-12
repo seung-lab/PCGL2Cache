@@ -200,4 +200,5 @@ def _trigger_cache_update(l2ids, table_id: str, l2_cache_id: str) -> None:
     }
 
     c = MessagingClient()
-    c.publish("pychunkedgraph", payload, attributes)
+    exchange = os.getenv("L2CACHE_EXCHANGE", "pychunkedgraph")
+    c.publish(exchange, payload, attributes)

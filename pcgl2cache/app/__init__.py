@@ -35,6 +35,7 @@ class CustomJsonEncoder(json.JSONEncoder):
 
 
 def create_app(test_config=None):
+    from .common import bp as l2cache_bp
     from .v1.routes import bp as l2cache_api_v1
 
     app = Flask(__name__)
@@ -42,6 +43,7 @@ def create_app(test_config=None):
     CORS(app, expose_headers="WWW-Authenticate")
 
     configure_app(app)
+    app.register_blueprint(l2cache_bp)
     app.register_blueprint(l2cache_api_v1)
     if test_config is not None:
         app.config.update(test_config)

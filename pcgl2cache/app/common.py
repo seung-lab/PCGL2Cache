@@ -10,14 +10,17 @@ from datetime import datetime
 import requests
 
 import numpy as np
-from pytz import UTC
 import pandas as pd
-
+from pytz import UTC
 from cloudvolume import compression
 from middle_auth_client import get_usernames
 
-from flask import current_app, g, jsonify, make_response, request
-from pcgl2cache import __version__
+from flask import g
+from flask import request
+from flask import jsonify
+from flask import Blueprint
+from flask import current_app
+from flask import make_response
 
 from .utils import get_registered_attributes
 
@@ -25,7 +28,18 @@ __api_versions__ = [1]
 __pcgl2cache_url_prefix__ = os.environ.get("PCGL2CACHE_URL_PREFIX", "l2cache")
 
 
+bp = Blueprint(
+    "pcgl2cache",
+    __name__,
+    url_prefix=f"/{__pcgl2cache_url_prefix__}",
+)
+
+
+@bp.route("/")
+@bp.route("/index")
 def index():
+    from .. import __version__
+
     return f"PCGL2Cache v{__version__}"
 
 
@@ -163,10 +177,28 @@ def handle_attributes(table_id: str, is_binary=False):
     cache_client = get_l2cache_client(table_id)
     entries = cache_client.read_entries(keys=l2_ids, attributes=attributes)
     result = {}
+    missing_l2ids = []
     for l2id in l2_ids:
         try:
             attrs = entries[l2id]
             result[str(l2id)] = {k.decode(): v[0].value for k, v in attrs.items()}
         except KeyError:
             result[str(l2id)] = {}
+            missing_l2ids.append(l2id)
+    _trigger_cache_update(missing_l2ids, table_id, cache_client.table_id)
     return result
+
+
+def _trigger_cache_update(l2ids, table_id: str, l2_cache_id: str) -> None:
+    import numpy as np
+    from messagingclient import MessagingClient
+
+    payload = np.array(l2ids, dtype=np.uint64).tobytes()
+    attributes = {
+        "table_id": table_id,
+        "l2_cache_id": l2_cache_id,
+    }
+
+    c = MessagingClient()
+    exchange = os.getenv("L2CACHE_EXCHANGE", "pychunkedgraph")
+    c.publish(exchange, payload, attributes)

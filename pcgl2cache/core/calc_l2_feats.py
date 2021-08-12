@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 from kvdbclient import BigTableClient
 
 
-def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
+def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=None):
     bbox = np.array(cv.bounds.to_list())
 
     vol_coord_start = bbox[:3] + chunk_coord
@@ -31,18 +31,26 @@ def get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp):
     if len(sv_ids) == 0:
         return vol.astype(np.uint32), {}
 
-    l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
+    _l2_ids = cg.get_roots(sv_ids, stop_layer=2, time_stamp=timestamp)
+    if l2_ids is not None:
+        mapping = {}
+        l2id_children_d = cg.get_children(l2_ids)
+        for _id in l2_ids:
+            children = l2id_children_d[_id]
+            try:
+                idx = np.where(sv_ids == children[0])[0][0]
+            except IndexError:
+                continue
+            parent = _l2_ids[idx]
+            mapping[parent] = _id
+        fastremap.remap(_l2_ids, mapping, in_place=True, preserve_missing_labels=True)
 
-    u_l2_ids = fastremap.unique(l2_ids)
-
+    u_l2_ids = fastremap.unique(_l2_ids)
     u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
-
-    cont_ids = fastremap.remap(l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
-
+    cont_ids = fastremap.remap(_l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
     fastremap.remap(
         vol, dict(zip(sv_ids, cont_ids)), preserve_missing_labels=True, in_place=True
     )
-
     return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
 
 
@@ -52,7 +60,7 @@ def dist_weight(cv, coords):
     return 1 - dists / dists.max()
 
 
-def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
+def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     from . import attributes
 
     # First calculate eucledian distance transform for all segments
@@ -85,6 +93,21 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
     # encoded as described above.
     cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
+    if l2_ids is None:
+        l2_ids = np.array(list(cmap_stack.keys()))
+        l2_ids = l2_ids[l2_ids != 0]
+    else:
+        l2_dict_reverse = {v: k for k, v in l2_dict.items()}
+        _l2_ids = []
+        for k in l2_ids:
+            try:
+                _l2_ids.append(l2_dict_reverse[k])
+            except KeyError:
+                print(f"Unable to process L2 ID {k}")
+                continue
+        l2_ids = np.array(_l2_ids)
+        if l2_ids.size == 0:
+            return {}
 
     # Initiliaze PCA
     pca = decomposition.PCA(3)
@@ -96,11 +119,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     l2_max_dts = []
     l2_mean_dts = []
     l2_sizes = []
-    l2_ids = np.array(list(cmap_stack.keys()))
-    l2_ids = l2_ids[l2_ids != 0]
     l2_pca_comps = []
+    l2_pca_vals = []
     for l2_id in l2_ids:
-
         # We first disentangle the compound data for the specific L2 ID
         # and transform the flat indices to 3d indices.
         l2_stack = np.array(cmap_stack[l2_id], dtype=np.uint64)
@@ -135,7 +156,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
         else:
             coords_p = coords
 
-        l2_pca_comps.append(pca.fit(coords_p * cv.resolution).components_)
+        pca.fit(coords_p * cv.resolution)
+        l2_pca_comps.append(pca.components_)
+        l2_pca_vals.append(pca.singular_values_)
 
     # In a last step we adjust for the chunk offset.
     offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
@@ -148,6 +171,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
     )
     l2_bboxs = np.array(l2_bboxs) + offset
     l2_pca_comps = np.array(l2_pca_comps)
+    l2_pca_vals = np.array(l2_pca_vals)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
 
     # Area calculations are handled seaprately and are performed by overlap through
@@ -190,41 +214,43 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict):
         "rep_coord_nm": l2_max_scaled_coords.astype(attributes.UINT64.type),
         "chunk_intersect_count": l2_chunk_intersects.astype(attributes.UINT16.type),
         "pca_comp": l2_pca_comps.astype(attributes.FLOAT16.type),
+        "pca_vals": l2_pca_vals.astype(attributes.FLOAT32.type),
     }
 
 
-def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp):
-    vol_l2, l2_dict = get_l2_seg(cg, cv, chunk_coord, chunk_size, timestamp)
+def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids):
+    vol_l2, l2_dict = get_l2_seg(
+        cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=l2_ids
+    )
     if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
         return {}
-    return calculate_features(cv, chunk_coord, vol_l2, l2_dict)
+    return calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids)
 
 
-def _l2cache_thread(cg, cv, chunk_coord, timestamp):
+def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids):
     chunk_size = cg.chunk_size.astype(np.int)
     chunk_coord = chunk_coord * chunk_size
-    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp)
+    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids)
 
 
-def run_l2cache(cg_table_id, cv_path, chunk_coord, timestamp=None):
+def run_l2cache(cg, cv_path, chunk_coord=None, timestamp=None, l2_ids=None):
     from datetime import datetime
-    from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
     from cloudvolume import CloudVolume
 
-    timestamp = datetime(2019, 7, 2, 20, 51)
+    if chunk_coord is None:
+        assert l2_ids is not None and len(l2_ids) > 0
+        chunk_coord = cg.get_chunk_coordinates(l2_ids[0])
     chunk_coord = np.array(list(chunk_coord), dtype=int)
-
-    cg = ChunkedGraph(cg_table_id)
     cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    return _l2cache_thread(cg, cv, chunk_coord, timestamp)
+    return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids)
 
 
-def run_l2cache_batch(table, cv_path, chunk_coords, timestamp=None):
+def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):
     ret_dicts = []
     for chunk_coord in chunk_coords:
-        ret_dicts.append(run_l2cache(table, cv_path, chunk_coord, timestamp))
+        ret_dicts.append(run_l2cache(cg, cv_path, chunk_coord, timestamp))
 
     comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:
@@ -249,6 +275,7 @@ def write_to_db(client: BigTableClient, result_d: dict) -> None:
             rep_coord_nm,
             chunk_intersect_count,
             pca_comp,
+            pca_vals,
         ) = tup
         val_d = {
             attributes.SIZE_NM3: size_nm3,
@@ -258,6 +285,7 @@ def write_to_db(client: BigTableClient, result_d: dict) -> None:
             attributes.REP_COORD_NM: rep_coord_nm,
             attributes.CHUNK_INTERSECT_COUNT: chunk_intersect_count,
             attributes.PCA: pca_comp,
+            attributes.PCA_VAL: pca_vals,
         }
         entries.append(Entry(EntryKey(l2id), val_d))
     client.write_entries(entries)

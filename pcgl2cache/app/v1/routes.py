@@ -2,7 +2,6 @@ from flask import request
 from flask import Blueprint
 from middle_auth_client import auth_required
 from middle_auth_client import auth_requires_permission
-from pychunkedgraph.backend.chunkedgraph_exceptions import ChunkedGraphAPIError
 
 from ...app import common
 from ...app.utils import tobinary
@@ -42,11 +41,6 @@ def after_request(response):
 @bp.errorhandler(Exception)
 def unhandled_exception(e):
     return common.unhandled_exception(e)
-
-
-@bp.errorhandler(ChunkedGraphAPIError)
-def api_exception(e):
-    return common.api_exception(e)
 
 
 @bp.route("/attribute_metadata", methods=["GET"])

@@ -5,7 +5,6 @@ from flask import current_app, json
 from google.auth.credentials import Credentials
 
 from kvdbclient import BigTableClient
-from pychunkedgraph.backend import chunkedgraph
 
 CACHE = {}
 
@@ -86,23 +85,6 @@ def tobinary_multiples(arr):
     :return: binary
     """
     return [np.array(arr_i).tobytes() for arr_i in arr]
-
-
-def get_username_dict(user_ids, auth_token):
-    import requests
-
-    AUTH_URL = os.environ.get("AUTH_URL", None)
-    if AUTH_URL is None:
-        from pychunkedgraph.backend.chunkedgraph_exceptions import ChunkedGraphError
-
-        raise ChunkedGraphError("No AUTH_URL defined")
-
-    users_request = requests.get(
-        f"https://{AUTH_URL}/api/v1/username?id={','.join(map(str, np.unique(user_ids)))}",
-        headers={"authorization": "Bearer " + auth_token},
-        timeout=5,
-    )
-    return {x["id"]: x["name"] for x in users_request.json()}
 
 
 def get_registered_attributes() -> dict:

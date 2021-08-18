@@ -1,15 +1,11 @@
-import fastremap
-from edt import edt
+import logging
 from collections import Counter
 from collections import defaultdict
 
 import numpy as np
+import fastremap
 from sklearn import decomposition
-
-import warnings
-
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-
+from edt import edt
 from kvdbclient import BigTableClient
 
 
@@ -103,7 +99,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
             try:
                 _l2_ids.append(l2_dict_reverse[k])
             except KeyError:
-                print(f"Unable to process L2 ID {k}")
+                logging.warning(f"Unable to process L2 ID {k}")
                 continue
         l2_ids = np.array(_l2_ids)
         if l2_ids.size == 0:

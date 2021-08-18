@@ -17,6 +17,7 @@ def get_batches(cg: ChunkedGraph, l2ids: Iterable) -> DefaultDict:
 
 
 def callback(payload):
+    import logging
     from kvdbclient import BigTableClient
     from pcgl2cache.core.calc_l2_feats import run_l2cache
     from pcgl2cache.core.calc_l2_feats import write_to_db
@@ -25,7 +26,8 @@ def callback(payload):
     table_id = payload.attributes["table_id"]
     l2_cache_id = payload.attributes["l2_cache_id"]
 
-    print(
+    logging.basicConfig(level=logging.INFO)
+    logging.info(
         f"Calculating features for {l2ids.size} L2 IDs, graph: {table_id}, cache: {l2_cache_id}."
     )
     cv_path = getenv(
@@ -47,5 +49,5 @@ def callback(payload):
 
 
 c = MessagingClient()
-l2cache_update_topic = getenv("L2CACHE_UPDATE_TOPIC", "test")
-c.consume(l2cache_update_topic, callback)
+l2cache_update_queue = getenv("L2CACHE_UPDATE_QUEUE", "test")
+c.consume(l2cache_update_queue, callback)

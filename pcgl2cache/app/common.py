@@ -148,21 +148,12 @@ def handle_attr_metadata():
 
 
 def handle_attributes(table_id: str, is_binary=False):
-    # TODO remove test url
-    # /l2cache/api/v1/table/fly_v31/attributes?attribute_names=size_nm3,mean_dt_nm
     from ..app.utils import get_l2cache_client
 
     if is_binary:
         l2_ids = np.frombuffer(request.data, np.uint64)
     else:
         l2_ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
-
-    # l2_ids = [
-    #     175137943013294113,
-    #     175137943013294114,
-    #     175137943013294118,
-    #     175137943013294119,
-    # ]
 
     attributes = None
     attribute_names = request.args.get("attribute_names")
@@ -185,7 +176,11 @@ def handle_attributes(table_id: str, is_binary=False):
         except KeyError:
             result[str(l2id)] = {}
             missing_l2ids.append(l2id)
-    _trigger_cache_update(missing_l2ids, table_id, cache_client.table_id)
+    try:
+        _trigger_cache_update(missing_l2ids, table_id, cache_client.table_id)
+    except Exception:
+        # TODO inspect error thrown when exchange not found
+        pass
     return result
 
 

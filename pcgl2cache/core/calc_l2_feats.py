@@ -229,17 +229,11 @@ def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids):
     return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids)
 
 
-def run_l2cache(cg, cv_path, chunk_coord=None, timestamp=None, l2_ids=None):
-    from datetime import datetime
-    from cloudvolume import CloudVolume
-
+def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2_ids=None):
     if chunk_coord is None:
         assert l2_ids is not None and len(l2_ids) > 0
         chunk_coord = cg.get_chunk_coordinates(l2_ids[0])
     chunk_coord = np.array(list(chunk_coord), dtype=int)
-    cv = CloudVolume(
-        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
-    )
     return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids)
 
 

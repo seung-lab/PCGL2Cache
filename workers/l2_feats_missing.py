@@ -18,6 +18,7 @@ def get_batches(cg: ChunkedGraph, l2ids: Iterable) -> DefaultDict:
 
 def callback(payload):
     import logging
+    from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
     from pcgl2cache.core.calc_l2_feats import run_l2cache
     from pcgl2cache.core.calc_l2_feats import write_to_db
@@ -35,17 +36,15 @@ def callback(payload):
         "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31",
     )
 
+    client = BigTableClient(l2_cache_id)
     cg = ChunkedGraph(table_id)
+    cv = CloudVolume(
+        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
+    )
     chunk_l2ids_map = get_batches(cg, l2ids)
-    ret_dicts = []
     for batch in chunk_l2ids_map.values():
-        ret_dicts.append(run_l2cache(cg, cv_path, l2_ids=batch))
-
-    com_dict = defaultdict(list)
-    for ret_dict in ret_dicts:
-        for k in ret_dict:
-            com_dict[k].extend(ret_dict[k])
-    write_to_db(BigTableClient(l2_cache_id), com_dict)
+        result = run_l2cache(cg, cv, l2_ids=batch)
+        write_to_db(client, result)
 
 
 c = MessagingClient()

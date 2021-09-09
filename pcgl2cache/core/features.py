@@ -96,6 +96,7 @@ def dist_weight(cv, coords):
     dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
     return 1 - dists / dists.max()
 
+
 @profile
 def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
     from . import attributes
@@ -129,22 +130,23 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
 
     # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
     # encoded as described above.
-    cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
-    if l2id is None:
-        l2ids = np.array(list(cmap_stack.keys()))
-        l2ids = l2ids[l2ids != 0]
-    else:
+
+    if l2id is not None:
         l2_dict_reverse = {v: k for k, v in l2_contiguous_d.items()}
-        _l2ids = []
-        for k in [l2id]:
-            try:
-                _l2ids.append(l2_dict_reverse[k])
-            except KeyError:
-                logging.warning(f"Unable to process L2 ID {k}")
-                continue
-        l2ids = np.array(_l2ids)
+        try:
+            l2_cont_id = l2_dict_reverse[l2id]
+            l2ids = np.array([l2_cont_id])
+        except KeyError:
+            logging.warning(f"Unable to process L2 ID {l2id}")
+            l2ids = np.array([])
         if l2ids.size == 0:
             return {}
+        nonzero_mask = vol_l2.flatten() != 0
+        cmap_stack = {l2_cont_id: stack[nonzero_mask]}
+    else:
+        cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
+        l2ids = np.array(list(cmap_stack.keys()))
+        l2ids = l2ids[l2ids != 0]
 
     # Initiliaze PCA
     pca = decomposition.PCA(3)

@@ -8,12 +8,14 @@ from edt import edt
 from sklearn import decomposition
 from kvdbclient import BigTableClient
 
+from memory_profiler import profile
 
-class L2ChunkFeatures:
+
+class L2ChunkVolume:
     def __init__(self, cg, cv, coordinates, timestamp):
         self._cg = cg
         self._cv = cv
-        self._coordinates = coordinates
+        self._coordinates = coordinates * self.chunk_size
         self._timestamp = timestamp
 
     @property
@@ -25,16 +27,16 @@ class L2ChunkFeatures:
         return self._cv
 
     @property
+    def chunk_size(self):
+        return self._cg.chunk_size.astype(np.int)
+
+    @property
     def coordinates(self):
         return self._coordinates
 
     @property
     def timestamp(self):
         return self._timestamp
-
-    @property
-    def chunk_size(self):
-        return self._cg.chunk_size.astype(np.int)
 
     @property
     def bbox(self):
@@ -50,38 +52,43 @@ class L2ChunkFeatures:
             vol_start[2] : vol_end[2],
         ][..., 0]
 
-    def get_segmentation(self, l2id=None):
+    @profile
+    def get_remapped_segmentation(self, l2id=None):
+        """
+        Remaps suoervoxel IDs in a chunk volume with L2 parent IDs represented by contiguous IDs.
+        """
         vol = self.get_volume()
         sv_ids = fastremap.unique(vol)
         sv_ids = sv_ids[sv_ids != 0]
         if len(sv_ids) == 0:
             return vol.astype(np.uint32), {}
 
-        _l2_ids = self.cg.get_roots(sv_ids, stop_layer=2, time_stamp=self.timestamp)
+        _l2ids = self.cg.get_roots(sv_ids, stop_layer=2, time_stamp=self.timestamp)
         if l2id is not None:
             # remap given l2id from get_roots to given l2id
             remapping = {}
             children = self.cg.get_children(l2id)
             try:
                 idx = np.where(sv_ids == children[0])[0][0]
+                parent = _l2ids[idx]
+                remapping[parent] = l2id
             except IndexError:
                 pass
-            parent = _l2_ids[idx]
-            remapping[parent] = l2id
             fastremap.remap(
-                _l2_ids, remapping, in_place=True, preserve_missing_labels=True
+                _l2ids, remapping, in_place=True, preserve_missing_labels=True
             )
+            fastremap.mask_except(vol, children.tolist(), in_place=True)
 
-        u_l2_ids = fastremap.unique(_l2_ids)
-        u_cont_ids = np.arange(1, 1 + len(u_l2_ids))
-        cont_ids = fastremap.remap(_l2_ids, dict(zip(u_l2_ids, u_cont_ids)))
+        u_l2ids = fastremap.unique(_l2ids)
+        u_cont_ids = np.arange(1, 1 + len(u_l2ids))
+        cont_ids = fastremap.remap(_l2ids, dict(zip(u_l2ids, u_cont_ids)))
         fastremap.remap(
             vol,
             dict(zip(sv_ids, cont_ids)),
             preserve_missing_labels=True,
             in_place=True,
         )
-        return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2_ids))
+        return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2ids))
 
 
 def dist_weight(cv, coords):
@@ -89,8 +96,8 @@ def dist_weight(cv, coords):
     dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
     return 1 - dists / dists.max()
 
-
-def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
+@profile
+def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
     from . import attributes
 
     # First calculate eucledian distance transform for all segments
@@ -123,20 +130,20 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
     # encoded as described above.
     cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
-    if l2_ids is None:
-        l2_ids = np.array(list(cmap_stack.keys()))
-        l2_ids = l2_ids[l2_ids != 0]
+    if l2id is None:
+        l2ids = np.array(list(cmap_stack.keys()))
+        l2ids = l2ids[l2ids != 0]
     else:
-        l2_dict_reverse = {v: k for k, v in l2_dict.items()}
-        _l2_ids = []
-        for k in l2_ids:
+        l2_dict_reverse = {v: k for k, v in l2_contiguous_d.items()}
+        _l2ids = []
+        for k in [l2id]:
             try:
-                _l2_ids.append(l2_dict_reverse[k])
+                _l2ids.append(l2_dict_reverse[k])
             except KeyError:
                 logging.warning(f"Unable to process L2 ID {k}")
                 continue
-        l2_ids = np.array(_l2_ids)
-        if l2_ids.size == 0:
+        l2ids = np.array(_l2ids)
+        if l2ids.size == 0:
             return {}
 
     # Initiliaze PCA
@@ -151,10 +158,10 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     l2_sizes = []
     l2_pca_comps = []
     l2_pca_vals = []
-    for l2_id in l2_ids:
+    for l2id in l2ids:
         # We first disentangle the compound data for the specific L2 ID
         # and transform the flat indices to 3d indices.
-        l2_stack = np.array(cmap_stack[l2_id], dtype=np.uint64)
+        l2_stack = np.array(cmap_stack[l2id], dtype=np.uint64)
         dts = l2_stack >> 32
         idxs = l2_stack.astype(np.uint32)
         coords = np.array(np.unravel_index(np.array(idxs), vol_l2.shape)).T
@@ -233,10 +240,10 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     z_dict = Counter(dict(zip(u_z, c_z * z_area)))
 
     area_dict = x_dict + y_dict + z_dict
-    areas = np.array([area_dict[l2_id] for l2_id in l2_ids])
+    areas = np.array([area_dict[l2id] for l2id in l2ids])
 
     return {
-        "l2id": fastremap.remap(l2_ids, l2_dict).astype(attributes.UINT64.type),
+        "l2id": fastremap.remap(l2ids, l2_contiguous_d).astype(attributes.UINT64.type),
         "size_nm3": l2_sizes.astype(attributes.UINT32.type),
         "area_nm2": areas.astype(attributes.UINT32.type),
         "max_dt_nm": l2_max_dts.astype(attributes.UINT16.type),
@@ -248,27 +255,20 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids=None):
     }
 
 
-def download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids):
-    vol_l2, l2_dict = get_l2_seg(
-        cg, cv, chunk_coord, chunk_size, timestamp, l2_ids=l2_ids
-    )
-    if np.sum(np.array(list(l2_dict.values())) != 0) == 0:
+def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2id):
+    l2chunk = L2ChunkVolume(cg, cv, chunk_coord, timestamp)
+    vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
+    if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
         return {}
-    return calculate_features(cv, chunk_coord, vol_l2, l2_dict, l2_ids)
+    return calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id)
 
 
-def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids):
-    chunk_size = cg.chunk_size.astype(np.int)
-    chunk_coord = chunk_coord * chunk_size
-    return download_and_calculate(cg, cv, chunk_coord, chunk_size, timestamp, l2_ids)
-
-
-def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2_ids=None):
+def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
     if chunk_coord is None:
-        assert l2_ids is not None and len(l2_ids) > 0
-        chunk_coord = cg.get_chunk_coordinates(l2_ids[0])
+        assert l2id is not None
+        chunk_coord = cg.get_chunk_coordinates(l2id)
     chunk_coord = np.array(list(chunk_coord), dtype=int)
-    return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2_ids)
+    return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2id)
 
 
 def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):

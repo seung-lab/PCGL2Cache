@@ -7,8 +7,6 @@ import numpy as np
 from messagingclient import MessagingClient
 from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 
-from memory_profiler import profile
-
 
 def get_batches(cg: ChunkedGraph, l2ids: Iterable) -> DefaultDict:
     chunk_ids = cg.get_chunk_ids_from_node_ids(l2ids)
@@ -22,8 +20,8 @@ def callback(payload):
     import logging
     from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
-    from pcgl2cache.core.calc_l2_feats import run_l2cache
-    from pcgl2cache.core.calc_l2_feats import write_to_db
+    from pcgl2cache.core.features import run_l2cache
+    from pcgl2cache.core.features import write_to_db
 
     # l2ids = np.frombuffer(payload.data, dtype=np.uint64)
     # table_id = payload.attributes["table_id"]
@@ -46,7 +44,7 @@ def callback(payload):
         l2ids.extend(list(rr.keys()))
         if len(l2ids):
             break
-    l2ids = np.array(l2ids[:5], dtype=np.uint64)
+    l2ids = np.array(l2ids[:1], dtype=np.uint64)
 
     logging.basicConfig(level=logging.INFO)
     logging.info(
@@ -62,10 +60,13 @@ def callback(payload):
     cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    chunk_l2ids_map = get_batches(cg, l2ids)
-    for batch in chunk_l2ids_map.values():
-        result = run_l2cache(cg, cv, l2_ids=batch)
-        # write_to_db(client, result)
+    # chunk_l2ids_map = get_batches(cg, l2ids)
+    # for batch in chunk_l2ids_map.values():
+    #     result = run_l2cache(cg, cv, l2_ids=batch)
+    #     write_to_db(client, result)
+
+    for _id in l2ids:
+        result = run_l2cache(cg, cv, l2id=_id)
 
 
 callback(None)

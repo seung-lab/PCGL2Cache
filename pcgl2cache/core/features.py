@@ -262,7 +262,7 @@ def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2id):
     vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
     if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
         return {}
-    return calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id)
+    return calculate_features(cv, l2chunk.coordinates, vol_l2, l2_contiguous_d, l2id)
 
 
 def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):

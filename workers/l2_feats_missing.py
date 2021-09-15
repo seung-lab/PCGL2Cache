@@ -46,8 +46,6 @@ def callback(payload):
         write_to_db(client, result)
 
 
-callback(None)
-
-# c = MessagingClient()
-# l2cache_update_queue = getenv("L2CACHE_UPDATE_QUEUE", "test")
-# c.consume(l2cache_update_queue, callback)
+c = MessagingClient()
+l2cache_update_queue = getenv("L2CACHE_UPDATE_QUEUE", "test")
+c.consume(l2cache_update_queue, callback)

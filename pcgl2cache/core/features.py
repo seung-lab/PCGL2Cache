@@ -8,8 +8,6 @@ from edt import edt
 from sklearn import decomposition
 from kvdbclient import BigTableClient
 
-from memory_profiler import profile
-
 
 class L2ChunkVolume:
     def __init__(self, cg, cv, coordinates, timestamp):
@@ -52,7 +50,6 @@ class L2ChunkVolume:
             vol_start[2] : vol_end[2],
         ][..., 0]
 
-    @profile
     def get_remapped_segmentation(self, l2id=None):
         """
         Remaps suoervoxel IDs in a chunk volume with L2 parent IDs represented by contiguous IDs.
@@ -91,22 +88,13 @@ class L2ChunkVolume:
         return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2ids))
 
 
-def dist_weight(cv, coords):
-    mean_coord = np.mean(coords, axis=0)
-    dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
-    return 1 - dists / dists.max()
-
-
-@profile
-def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
-    from . import attributes
-
+def get_edt_stack(vol_l2, resolution):
     # First calculate eucledian distance transform for all segments
     # Every entrie in vol_dt is the distance in nm from the closest
     # boundary
     vol_dt = edt(
         vol_l2,
-        anisotropy=cv.resolution,
+        anisotropy=resolution,
         black_border=False,
         parallel=1,  # number of threads, <= 0 sets to num cpu
     )
@@ -127,10 +115,12 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
     stack = ((vol_dt.astype(np.uint64).flatten()) << 32) + np.arange(
         size, dtype=np.uint64
     )
+    return stack
 
+
+def process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=None):
     # cmap_stack is a dictionary of (L2) IDs -> list of 64 bit values
-    # encoded as described above.
-
+    # encoded as described in `get_edt_stack`.
     if l2id is not None:
         l2_dict_reverse = {v: k for k, v in l2_contiguous_d.items()}
         try:
@@ -142,15 +132,27 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
         if l2ids.size == 0:
             return {}
         nonzero_mask = vol_l2.flatten() != 0
-        cmap_stack = {l2_cont_id: stack[nonzero_mask]}
+        cmap_stack = {l2_cont_id: edt_stack[nonzero_mask]}
     else:
-        cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), stack)
+        cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), edt_stack)
         l2ids = np.array(list(cmap_stack.keys()))
         l2ids = l2ids[l2ids != 0]
+    return cmap_stack, l2ids
 
-    # Initiliaze PCA
+
+def dist_weight(cv, coords):
+    mean_coord = np.mean(coords, axis=0)
+    dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
+    return 1 - dists / dists.max()
+
+
+def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
+    from . import attributes
+
+    edt_stack = get_edt_stack(vol_l2, cv.resolution)
+    cmap_stack, l2ids = process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=l2id)
+
     pca = decomposition.PCA(3)
-
     l2_max_coords = []
     l2_max_scaled_coords = []
     l2_bboxs = []
@@ -257,20 +259,15 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
     }
 
 
-def _l2cache_thread(cg, cv, chunk_coord, timestamp, l2id):
-    l2chunk = L2ChunkVolume(cg, cv, chunk_coord, timestamp)
-    vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
-    if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
-        return {}
-    return calculate_features(cv, l2chunk.coordinates, vol_l2, l2_contiguous_d, l2id)
-
-
 def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
     if chunk_coord is None:
         assert l2id is not None
         chunk_coord = cg.get_chunk_coordinates(l2id)
-    chunk_coord = np.array(list(chunk_coord), dtype=int)
-    return _l2cache_thread(cg, cv, chunk_coord, timestamp, l2id)
+    l2chunk = L2ChunkVolume(cg, cv, np.array(list(chunk_coord), dtype=int), timestamp)
+    vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
+    if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
+        return {}
+    return calculate_features(cv, l2chunk.coordinates, vol_l2, l2_contiguous_d, l2id)
 
 
 def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):

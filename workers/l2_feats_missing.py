@@ -23,28 +23,9 @@ def callback(payload):
     from pcgl2cache.core.features import run_l2cache
     from pcgl2cache.core.features import write_to_db
 
-    # l2ids = np.frombuffer(payload.data, dtype=np.uint64)
-    # table_id = payload.attributes["table_id"]
-    # l2_cache_id = payload.attributes["l2_cache_id"]
-
-    table_id = "fly_v31"
-    l2_cache_id = "l2cache_fly_v31_v1"
-
-    import random
-    from itertools import product
-
-    cg = ChunkedGraph("fly_v31")
-    chunks = list(product(*[range(r) for r in (212, 110, 14)]))
-    print(len(chunks))
-
-    l2ids = []
-    for i in range(100):
-        c = random.choice(chunks)
-        rr = cg.range_read_chunk(layer=2, x=c[0], y=c[1], z=c[2])
-        l2ids.extend(list(rr.keys()))
-        if len(l2ids):
-            break
-    l2ids = np.array(l2ids[:1], dtype=np.uint64)
+    l2ids = np.frombuffer(payload.data, dtype=np.uint64)
+    table_id = payload.attributes["table_id"]
+    l2_cache_id = payload.attributes["l2_cache_id"]
 
     logging.basicConfig(level=logging.INFO)
     logging.info(
@@ -60,13 +41,9 @@ def callback(payload):
     cv = CloudVolume(
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
-    # chunk_l2ids_map = get_batches(cg, l2ids)
-    # for batch in chunk_l2ids_map.values():
-    #     result = run_l2cache(cg, cv, l2_ids=batch)
-    #     write_to_db(client, result)
-
     for _id in l2ids:
         result = run_l2cache(cg, cv, l2id=_id)
+        write_to_db(client, result)
 
 
 callback(None)

@@ -1,0 +1,10 @@
+steps:
+  - name: "gcr.io/cloud-builders/docker"
+    timeout: 600s
+    args:
+      - build
+      - "--tag=gcr.io/neuromancer-seung-import/pcgl2cache:worker_pcgv2_$TAG_NAME"
+      - "--file=./ingest.v2.Dockerfile"
+      - .
+images:
+  - "gcr.io/neuromancer-seung-import/pcgl2cache:worker_pcgv2_$TAG_NAME"

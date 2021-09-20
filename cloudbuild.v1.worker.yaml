@@ -4,7 +4,7 @@ steps:
     args:
       - build
       - "--tag=gcr.io/neuromancer-seung-import/pcgl2cache:worker_pcgv1_$TAG_NAME"
-      - "--file=./ingest.Dockerfile"
+      - "--file=./ingest.v1.Dockerfile"
       - .
 images:
   - "gcr.io/neuromancer-seung-import/pcgl2cache:worker_pcgv1_$TAG_NAME"

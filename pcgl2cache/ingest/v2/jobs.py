@@ -7,7 +7,7 @@ import numpy as np
 
 from ..utils import chunk_id_str
 from ..manager import IngestionManager
-from pychunkedgraph.graph import ChunkedGraph
+from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 
 
 def _post_task_completion(imanager: IngestionManager, layer: int, coords: np.ndarray):
@@ -26,9 +26,12 @@ def enqueue_atomic_tasks(
 
     imanager.redis.flushdb()
 
-    atomic_chunk_bounds = imanager.cg.meta.layer_chunk_bounds[2]
+    bbox = np.array(imanager.cg.cv.bounds.to_list())
+    dataset_size = bbox[3:] - bbox[:3]
+    atomic_chunk_bounds = np.ceil(dataset_size / imanager.cg.chunk_size).astype(np.int)
     chunk_coords = list(product(*[range(r) for r in atomic_chunk_bounds]))
     np.random.shuffle(chunk_coords)
+
     if imanager.config.TEST_RUN:
         mid = len(chunk_coords) // 2
         chunk_coords = chunk_coords[mid : mid + 10]
@@ -60,9 +63,7 @@ def _ingest_chunk(
 
     imanager = IngestionManager.from_pickle(im_info)
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
-    run_l2cache(
-        ChunkedGraph(graph_id=imanager.cg.table_id), cv_path, chunk_coord, timestamp
-    )
+    run_l2cache(ChunkedGraph(imanager.cg.table_id), cv_path, chunk_coord, timestamp)
     _post_task_completion(imanager, 2, chunk_coord)
 
 
@@ -78,7 +79,7 @@ def _ingest_chunks(
 
     imanager = IngestionManager.from_pickle(im_info)
     r = run_l2cache_batch(
-        ChunkedGraph(graph_id=imanager.cg.table_id), cv_path, chunk_coords, timestamp
+        ChunkedGraph(imanager.cg.table_id), cv_path, chunk_coords, timestamp
     )
     write_to_db(BigTableClient(imanager.cache_id), r)
     for chunk_coord in chunk_coords:

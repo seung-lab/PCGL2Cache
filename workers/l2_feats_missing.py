@@ -23,13 +23,24 @@ def callback(payload):
     from pcgl2cache.core.features import run_l2cache
     from pcgl2cache.core.features import write_to_db
 
-    l2ids = np.frombuffer(payload.data, dtype=np.uint64)
+    INFO_PRIORITY = 25
+    logging.basicConfig(
+        level=INFO_PRIORITY,
+        format="%(asctime)s %(message)s",
+        datefmt="%m/%d/%Y %I:%M:%S %p",
+    )
+
+    try:
+        l2ids = np.frombuffer(payload.data, dtype=np.uint64)
+    except TypeError:
+        logging.log(INFO_PRIORITY, "Could not parse numpy array")
+        return
     table_id = payload.attributes["table_id"]
     l2_cache_id = payload.attributes["l2_cache_id"]
 
-    logging.basicConfig(level=logging.INFO)
-    logging.info(
-        f"Calculating features for {l2ids.size} L2 IDs, graph: {table_id}, cache: {l2_cache_id}."
+    logging.log(
+        INFO_PRIORITY,
+        f"Calculating features for {l2ids.size} L2 IDs, graph: {table_id}, cache: {l2_cache_id}.",
     )
     cv_path = getenv(
         "CV_GRAPHENE_PATH",
@@ -42,6 +53,8 @@ def callback(payload):
         cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
     )
     for _id in l2ids:
+        if cg.get_chunk_layer(_id) != 2:
+            continue
         result = run_l2cache(cg, cv, l2id=_id)
         write_to_db(client, result)
 

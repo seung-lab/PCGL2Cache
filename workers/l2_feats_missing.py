@@ -38,7 +38,9 @@ def callback(payload):
     l2ids = get_l2ids(payload)
 
     # TODO table->cache mapping
-    assert table_id == "fly_v31"
+    if table_id is not "fly_v31":
+        # currently no other graph has cache, ignore
+        return
     l2_cache_id = payload.attributes.get("l2_cache_id", "l2cache_fly_v31_v1")
 
     logging.log(

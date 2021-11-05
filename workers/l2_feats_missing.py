@@ -21,6 +21,7 @@ def get_l2ids(payload) -> Iterable:
 
 
 def callback(payload):
+    import gc
     import logging
     from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
@@ -64,6 +65,7 @@ def callback(payload):
             continue
         result = run_l2cache(cg, cv, l2id=_id)
         write_to_db(client, result)
+        gc.collect()
 
 
 c = MessagingClient()

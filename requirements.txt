@@ -22,3 +22,4 @@ edt
 pyyaml
 cachetools
 codecov
+messagingclient

@@ -6,17 +6,22 @@ from os import getenv
 import numpy as np
 from messagingclient import MessagingClient
 from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
+from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
 
-def get_batches(cg: ChunkedGraph, l2ids: Iterable) -> DefaultDict:
-    chunk_ids = cg.get_chunk_ids_from_node_ids(l2ids)
-    chunk_l2id_map = defaultdict(list)
-    for k, v in zip(chunk_ids, l2ids):
-        chunk_l2id_map[k].append(v)
-    return chunk_l2id_map
+def get_l2ids(payload) -> Iterable:
+    from json import loads
+
+    try:
+        data = loads(payload.data)
+        return np.array(data["new_lvl2_ids"], dtype=basetypes.NODE_ID)
+    except TypeError:
+        # not json, try numpy array
+        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
 
 
 def callback(payload):
+    import gc
     import logging
     from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
@@ -30,18 +35,21 @@ def callback(payload):
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
-    try:
-        l2ids = np.frombuffer(payload.data, dtype=np.uint64)
-    except TypeError:
-        logging.log(INFO_PRIORITY, "Could not parse numpy array")
-        return
     table_id = payload.attributes["table_id"]
-    l2_cache_id = payload.attributes["l2_cache_id"]
+    l2ids = get_l2ids(payload)
+
+    # TODO table->cache mapping
+    if table_id is not "fly_v31":
+        # currently no other graph has cache, ignore
+        return
+    l2_cache_id = payload.attributes.get("l2_cache_id", "l2cache_fly_v31_v1")
 
     logging.log(
         INFO_PRIORITY,
         f"Calculating features for {l2ids.size} L2 IDs, graph: {table_id}, cache: {l2_cache_id}.",
     )
+
+    # TODO table->graphene mapping
     cv_path = getenv(
         "CV_GRAPHENE_PATH",
         "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31",
@@ -57,8 +65,9 @@ def callback(payload):
             continue
         result = run_l2cache(cg, cv, l2id=_id)
         write_to_db(client, result)
+        gc.collect()
 
 
 c = MessagingClient()
-l2cache_update_queue = getenv("L2CACHE_UPDATE_QUEUE", "test")
+l2cache_update_queue = getenv("L2CACHE_UPDATE_QUEUE", "does-not-exist")
 c.consume(l2cache_update_queue, callback)

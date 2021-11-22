@@ -10,7 +10,7 @@ from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
 
 def get_l2ids(payload) -> Iterable:
-    from json import loads
+    from pickle import loads
 
     try:
         data = loads(payload.data)

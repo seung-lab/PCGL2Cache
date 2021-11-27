@@ -5,6 +5,8 @@ from os import getenv
 
 import numpy as np
 from messagingclient import MessagingClient
+from kvdbclient.base import Entry
+from kvdbclient.base import EntryKey
 from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
@@ -64,6 +66,9 @@ def callback(payload):
         if cg.get_chunk_layer(_id) != 2:
             continue
         result = run_l2cache(cg, cv, l2id=_id)
+        if not result:
+            entry = Entry(EntryKey(_id), {})
+            client.write_entries([entry])
         write_to_db(client, result)
         gc.collect()
 

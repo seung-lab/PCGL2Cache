@@ -27,6 +27,7 @@ def callback(payload):
     import logging
     from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
+    from pcgl2cache.core.attributes import SIZE_NM3
     from pcgl2cache.core.features import run_l2cache
     from pcgl2cache.core.features import write_to_db
 
@@ -67,7 +68,7 @@ def callback(payload):
             continue
         result = run_l2cache(cg, cv, l2id=_id)
         if not result:
-            entry = Entry(EntryKey(_id), {})
+            entry = Entry(EntryKey(_id), {SIZE_NM3: np.uint64(0)})
             client.write_entries([entry])
         write_to_db(client, result)
         gc.collect()

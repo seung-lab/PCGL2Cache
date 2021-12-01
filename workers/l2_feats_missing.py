@@ -15,11 +15,11 @@ def get_l2ids(payload) -> Iterable:
     from pickle import loads
 
     try:
+        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
+    except (ValueError, TypeError):
+        # not numpy array, try pickle
         data = loads(payload.data)
         return np.array(data["new_lvl2_ids"], dtype=basetypes.NODE_ID)
-    except TypeError:
-        # not json, try numpy array
-        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
 
 
 def callback(payload):

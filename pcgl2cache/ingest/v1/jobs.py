@@ -59,7 +59,7 @@ def _ingest_chunk(
     chunk_coord: Sequence[int],
     timestamp: datetime,
 ):
-    from ...core.calc_l2_feats import run_l2cache
+    from ...core.features import run_l2cache
 
     imanager = IngestionManager.from_pickle(im_info)
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
@@ -73,8 +73,8 @@ def _ingest_chunks(
     chunk_coords: Sequence[Sequence[int]],
     timestamp: datetime,
 ):
-    from ...core.calc_l2_feats import run_l2cache_batch
-    from ...core.calc_l2_feats import write_to_db
+    from ...core.features import run_l2cache_batch
+    from ...core.features import write_to_db
     from kvdbclient import BigTableClient
 
     imanager = IngestionManager.from_pickle(im_info)

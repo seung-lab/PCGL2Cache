@@ -5,6 +5,8 @@ from os import getenv
 
 import numpy as np
 from messagingclient import MessagingClient
+from kvdbclient.base import Entry
+from kvdbclient.base import EntryKey
 from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
@@ -13,11 +15,11 @@ def get_l2ids(payload) -> Iterable:
     from pickle import loads
 
     try:
+        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
+    except (ValueError, TypeError):
+        # not numpy array, try pickle
         data = loads(payload.data)
         return np.array(data["new_lvl2_ids"], dtype=basetypes.NODE_ID)
-    except TypeError:
-        # not json, try numpy array
-        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
 
 
 def callback(payload):
@@ -25,6 +27,7 @@ def callback(payload):
     import logging
     from cloudvolume import CloudVolume
     from kvdbclient import BigTableClient
+    from pcgl2cache.core.attributes import SIZE_NM3
     from pcgl2cache.core.features import run_l2cache
     from pcgl2cache.core.features import write_to_db
 
@@ -64,6 +67,9 @@ def callback(payload):
         if cg.get_chunk_layer(_id) != 2:
             continue
         result = run_l2cache(cg, cv, l2id=_id)
+        if not result:
+            entry = Entry(EntryKey(_id), {SIZE_NM3: np.uint64(0)})
+            client.write_entries([entry])
         write_to_db(client, result)
         gc.collect()
 

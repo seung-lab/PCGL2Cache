@@ -28,7 +28,7 @@ MEAN_DT_NM = Attribute(
 REP_COORD_NM = Attribute(
     key=b"rep_coord_nm",
     family_id="0",
-    serializer=NumPyArray(dtype=UINT64),
+    serializer=NumPyArray(dtype=UINT16),
 )
 
 CHUNK_INTERSECT_COUNT = Attribute(

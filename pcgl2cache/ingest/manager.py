@@ -55,7 +55,7 @@ class IngestionManager:
         from .redis import get_redis_connection
         from .redis import keys as r_keys
 
-        self._redis = get_redis_connection(self._config.CLUSTER.REDIS_URL)
+        self._redis = get_redis_connection()
         self._redis.set(r_keys.INGESTION_MANAGER, self.serialize_info(pickled=True))
         return self._redis
 

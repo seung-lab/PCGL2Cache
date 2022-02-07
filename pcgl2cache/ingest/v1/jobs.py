@@ -30,12 +30,17 @@ def enqueue_atomic_tasks(
     dataset_size = bbox[3:] - bbox[:3]
     atomic_chunk_bounds = np.ceil(dataset_size / imanager.cg.chunk_size).astype(np.int)
     chunk_coords = list(product(*[range(r) for r in atomic_chunk_bounds]))
-    np.random.shuffle(chunk_coords)
 
     if imanager.config.TEST_RUN:
-        mid = len(chunk_coords) // 2
-        chunk_coords = chunk_coords[mid : mid + 10]
+        x, y, z = np.array(atomic_chunk_bounds) // 2
+        f = lambda r1, r2, r3: np.array(np.meshgrid(r1, r2, r3), dtype=int).T.reshape(
+            -1, 3
+        )
+        chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
 
+    print(chunk_coords)
+
+    np.random.shuffle(chunk_coords)
     chunked_jobs = chunked(chunk_coords, 1)
 
     for batch in chunked_jobs:

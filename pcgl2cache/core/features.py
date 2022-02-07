@@ -8,6 +8,8 @@ from edt import edt
 from sklearn import decomposition
 from kvdbclient import BigTableClient
 
+from . import attributes
+
 
 class L2ChunkVolume:
     def __init__(self, cg, cv, coordinates, timestamp):
@@ -141,16 +143,18 @@ def process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=None):
 
 
 def dist_weight(cv, coords):
+    import warnings
+
     mean_coord = np.mean(coords, axis=0)
     dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
-    return 1 - dists / dists.max()
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore")
+        return 1 - dists / dists.max()
 
 
-def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
-    from . import attributes
-
+def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     edt_stack = get_edt_stack(vol_l2, cv.resolution)
-    cmap_stack, l2ids = process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=l2id)
+    cmap_stack, l2ids = process_edt_stack(vol_l2, l2_cont_d, edt_stack, l2id=l2id)
 
     pca = decomposition.PCA(3)
     l2_max_coords = []
@@ -182,6 +186,11 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
             [np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)]
         )
 
+        if len(idxs) == 1:
+            l2_pca_comps.append(np.zeros(shape=(0, 3)))
+            l2_pca_vals.append(np.zeros(shape=(0,)))
+            continue
+
         # The PCA calculation is straight-forward as long as the are sufficiently
         # many coordinates. We observed long runtimes for very large components.
         # Using a subset of the points in such cases proved to produce almost
@@ -201,18 +210,21 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
         l2_pca_comps.append(pca.components_)
         l2_pca_vals.append(pca.singular_values_)
 
-    # In a last step we adjust for the chunk offset.
-    offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
+    # offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
     l2_sizes = np.array(np.array(l2_sizes) * np.product(cv.resolution))
     l2_max_dts = np.array(l2_max_dts)
     l2_mean_dts = np.array(l2_mean_dts)
-    l2_max_coords = np.array((np.array(l2_max_coords) + offset) * cv.resolution)
-    l2_max_scaled_coords = np.array(
-        (np.array(l2_max_scaled_coords) + offset) * cv.resolution
-    )
-    l2_bboxs = np.array(l2_bboxs) + offset
-    l2_pca_comps = np.array(l2_pca_comps)
-    l2_pca_vals = np.array(l2_pca_vals)
+    # l2_max_coords = np.array((np.array(l2_max_coords) + offset) * cv.resolution)
+    # l2_max_scaled_coords = np.array(
+    #     (np.array(l2_max_scaled_coords) + offset) * cv.resolution
+    # )
+
+    l2_max_coords = np.array(l2_max_coords)
+    l2_max_scaled_coords = np.array(l2_max_scaled_coords)
+
+    # l2_bboxs = np.array(l2_bboxs) + offset
+    l2_pca_comps = np.array(l2_pca_comps, dtype=object)
+    l2_pca_vals = np.array(l2_pca_vals, dtype=object)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
 
     # Area calculations are handled seaprately and are performed by overlap through
@@ -247,15 +259,17 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_contiguous_d, l2id=None):
     areas = np.array([area_dict[l2id] for l2id in l2ids])
 
     return {
-        "l2id": fastremap.remap(l2ids, l2_contiguous_d).astype(attributes.UINT64.type),
-        "size_nm3": l2_sizes.astype(attributes.UINT32.type),
-        "area_nm2": areas.astype(attributes.UINT32.type),
-        "max_dt_nm": l2_max_dts.astype(attributes.UINT16.type),
-        "mean_dt_nm": l2_mean_dts.astype(attributes.FLOAT16.type),
-        "rep_coord_nm": l2_max_scaled_coords.astype(attributes.UINT64.type),
-        "chunk_intersect_count": l2_chunk_intersects.astype(attributes.UINT16.type),
-        "pca_comp": l2_pca_comps.astype(attributes.FLOAT16.type),
-        "pca_vals": l2_pca_vals.astype(attributes.FLOAT32.type),
+        "l2id": fastremap.remap(l2ids, l2_cont_d).astype(attributes.UINT64.type),
+        "size_nm3": l2_sizes.astype(attributes.SIZE_NM3.basetype),
+        "area_nm2": areas.astype(attributes.AREA_NM2.basetype),
+        "max_dt_nm": l2_max_dts.astype(attributes.MAX_DT_NM.basetype),
+        "mean_dt_nm": l2_mean_dts.astype(attributes.MEAN_DT_NM.basetype),
+        "rep_coord_nm": l2_max_scaled_coords.astype(attributes.REP_COORD_NM.basetype),
+        "chunk_intersect_count": l2_chunk_intersects.astype(
+            attributes.CHUNK_INTERSECT_COUNT.basetype
+        ),
+        "pca_comp": l2_pca_comps,
+        "pca_vals": l2_pca_vals,
     }
 
 
@@ -271,9 +285,12 @@ def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
 
 
 def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):
+    from cloudvolume import CloudVolume
+
+    cv = CloudVolume(cv_path)
     ret_dicts = []
     for chunk_coord in chunk_coords:
-        ret_dicts.append(run_l2cache(cg, cv_path, chunk_coord, timestamp))
+        ret_dicts.append(run_l2cache(cg, cv, chunk_coord, timestamp))
 
     comb_ret_dict = defaultdict(list)
     for ret_dict in ret_dicts:
@@ -283,7 +300,6 @@ def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):
 
 
 def write_to_db(client: BigTableClient, result_d: dict) -> None:
-    from . import attributes
     from kvdbclient.base import Entry
     from kvdbclient.base import EntryKey
 

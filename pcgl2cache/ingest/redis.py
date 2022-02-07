@@ -1,16 +1,17 @@
-"""
-redis helper funtions
-"""
-
 import os
 from collections import namedtuple
 
 import redis
 from rq import Queue
 
-# REDIS_SERVICE_HOST and REDIS_SERVICE_PORT are added by Kubernetes
-REDIS_HOST = os.environ.get("REDIS_SERVICE_HOST", "localhost")
-REDIS_PORT = os.environ.get("REDIS_SERVICE_PORT", "6379")
+REDIS_HOST = os.environ.get(
+    "REDIS_SERVICE_HOST",
+    os.environ.get("REDIS_HOST", "localhost"),
+)
+REDIS_PORT = os.environ.get(
+    "REDIS_SERVICE_PORT",
+    os.environ.get("REDIS_PORT", "6379"),
+)
 REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
 REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
 

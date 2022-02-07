@@ -2,13 +2,10 @@
 cli for running ingest
 """
 
-import yaml
-import numpy as np
 import click
 from flask.cli import AppGroup
 
 from .manager import IngestionManager
-from .redis import keys as r_keys
 from .redis import get_redis_connection
 
 ingest_cli = AppGroup("ingest")

@@ -1,10 +1,8 @@
-import itertools
-import numpy as np
 import pickle
 from typing import Dict
-from collections import defaultdict
 
-from cloudvolume import CloudVolume
+from rq import Queue as RQueue
+
 
 from . import IngestConfig
 
@@ -73,7 +71,7 @@ class IngestionManager:
             return pickle.dumps(info)
         return info
 
-    def get_task_queue(self, q_name):
+    def get_task_queue(self, q_name) -> RQueue:
         from .redis import get_rq_queue
 
         if q_name in self._task_queues:

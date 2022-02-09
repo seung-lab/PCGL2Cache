@@ -14,7 +14,7 @@ _cluster_ingest_defaults = (
     REDIS_URL,
     10,
     "atomic",
-    250000,
+    500000,
     60,
 )
 ClusterIngestConfig = namedtuple(

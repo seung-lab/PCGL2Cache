@@ -186,9 +186,10 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
             [np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)]
         )
 
-        if len(idxs) == 1:
-            l2_pca_comps.append(np.zeros(shape=(0, 3)))
-            l2_pca_vals.append(np.zeros(shape=(0,)))
+        # for consistency use biological size 0.01 um^3 for filtering small objects
+        if len(idxs) * np.product(cv.resolution) / 1e9 < 0.01:
+            l2_pca_comps.append(np.zeros(shape=(0, 3), dtype=attributes.PCA.basetype))
+            l2_pca_vals.append(np.zeros(shape=(0,), dtype=attributes.PCA_VAL.basetype))
             continue
 
         # The PCA calculation is straight-forward as long as the are sufficiently
@@ -207,11 +208,16 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
             coords_p = coords
 
         pca.fit(coords_p * cv.resolution)
-        l2_pca_comps.append(pca.components_)
-        l2_pca_vals.append(pca.singular_values_)
+        comps = np.array(pca.components_, dtype=attributes.PCA.basetype)
+        vals = np.array(pca.singular_values_, dtype=attributes.PCA.basetype)
+        l2_pca_comps.append(comps)
+        l2_pca_vals.append(vals)
+
+        # l2_pca_comps.append(pca.components_)
+        # l2_pca_vals.append(pca.singular_values_)
 
     # offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
-    l2_sizes = np.array(np.array(l2_sizes) * np.product(cv.resolution))
+    l2_sizes = np.array(l2_sizes)
     l2_max_dts = np.array(l2_max_dts)
     l2_mean_dts = np.array(l2_mean_dts)
     # l2_max_coords = np.array((np.array(l2_max_coords) + offset) * cv.resolution)
@@ -223,9 +229,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     l2_max_scaled_coords = np.array(l2_max_scaled_coords)
 
     # l2_bboxs = np.array(l2_bboxs) + offset
-    l2_pca_comps = np.array(l2_pca_comps, dtype=object)
-    l2_pca_vals = np.array(l2_pca_vals, dtype=object)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
+    # l2_pca_comps = np.array(l2_pca_comps, dtype=object)
+    # l2_pca_vals = np.array(l2_pca_vals, dtype=object)
 
     # Area calculations are handled seaprately and are performed by overlap through
     # shifts. We shift in each dimension and calculate the overlapping segment ids.
@@ -282,21 +288,6 @@ def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
     if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
         return {}
     return calculate_features(cv, l2chunk.coordinates, vol_l2, l2_contiguous_d, l2id)
-
-
-def run_l2cache_batch(cg, cv_path, chunk_coords, timestamp=None):
-    from cloudvolume import CloudVolume
-
-    cv = CloudVolume(cv_path)
-    ret_dicts = []
-    for chunk_coord in chunk_coords:
-        ret_dicts.append(run_l2cache(cg, cv, chunk_coord, timestamp))
-
-    comb_ret_dict = defaultdict(list)
-    for ret_dict in ret_dicts:
-        for k in ret_dict:
-            comb_ret_dict[k].extend(ret_dict[k])
-    return comb_ret_dict
 
 
 def write_to_db(client: BigTableClient, result_d: dict) -> None:

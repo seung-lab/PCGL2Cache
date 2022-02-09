@@ -11,6 +11,13 @@ from .redis import get_redis_connection
 ingest_cli = AppGroup("ingest")
 
 
+@ingest_cli.command("flush_redis")
+def flush_redis():
+    """FLush redis db."""
+    redis = get_redis_connection()
+    redis.flushdb()
+
+
 @ingest_cli.command("v1")
 @click.argument("cache_id", type=str)
 @click.argument("graph_id", type=str)
@@ -52,7 +59,7 @@ def ingest_graph(
 @ingest_cli.command("status")
 def ingest_status():
     redis = get_redis_connection()
-    print(redis.hlen("2c"))
+    print(redis.scard("2c"))
 
 
 def init_ingest_cmds(app):

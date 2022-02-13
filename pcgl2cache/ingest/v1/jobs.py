@@ -39,7 +39,7 @@ def enqueue_atomic_tasks(
         chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
 
     print(f"Jobs count: {len(chunk_coords)}")
-    chunked_jobs = chunked(chunk_coords, 100)
+    chunked_jobs = chunked(chunk_coords, 10000)
 
     for batch in chunked_jobs:
         q = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
@@ -79,9 +79,13 @@ def _ingest_chunk(
     from ...core.features import run_l2cache
     from ...core.features import write_to_db
 
-    cv = CloudVolume(cv_path)
     imanager = IngestionManager.from_pickle(im_info)
+    cg = ChunkedGraph(imanager.cg.table_id)
+    cv = CloudVolume(
+        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
+    )
+
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
-    r = run_l2cache(ChunkedGraph(imanager.cg.table_id), cv, chunk_coord, timestamp)
+    r = run_l2cache(cg, cv, chunk_coord, timestamp)
     write_to_db(BigTableClient(imanager.cache_id), r)
     _post_task_completion(imanager, 2, chunk_coord)

@@ -1,3 +1,4 @@
+import chunk
 import logging
 from collections import Counter
 from typing import Iterable
@@ -13,9 +14,10 @@ from . import attributes
 
 
 class L2ChunkVolume:
-    def __init__(self, cg, cv, coordinates, timestamp):
+    def __init__(self, cg, cv, coordinates, chunk_size, timestamp):
         self._cg = cg
         self._cv = cv
+        self._chunk_size = np.array(chunk_size, dtype=int)
         self._coordinates = coordinates * self.chunk_size
         self._timestamp = timestamp
 

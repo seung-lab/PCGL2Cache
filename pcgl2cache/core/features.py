@@ -1,6 +1,6 @@
+import chunk
 import logging
 from collections import Counter
-from collections import defaultdict
 
 import numpy as np
 import fastremap
@@ -12,9 +12,10 @@ from . import attributes
 
 
 class L2ChunkVolume:
-    def __init__(self, cg, cv, coordinates, timestamp):
+    def __init__(self, cg, cv, coordinates, chunk_size, timestamp):
         self._cg = cg
         self._cv = cv
+        self._chunk_size = np.array(chunk_size, dtype=int)
         self._coordinates = coordinates * self.chunk_size
         self._timestamp = timestamp
 
@@ -28,7 +29,7 @@ class L2ChunkVolume:
 
     @property
     def chunk_size(self):
-        return self._cg.chunk_size.astype(np.int)
+        return self._chunk_size
 
     @property
     def coordinates(self):
@@ -279,11 +280,11 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     }
 
 
-def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
+def run_l2cache(cg, cv, chunk_size, chunk_coord=None, timestamp=None, l2id=None):
     if chunk_coord is None:
         assert l2id is not None
         chunk_coord = cg.get_chunk_coordinates(l2id)
-    l2chunk = L2ChunkVolume(cg, cv, np.array(list(chunk_coord), dtype=int), timestamp)
+    l2chunk = L2ChunkVolume(cg, cv, chunk_coord, chunk_size, timestamp)
     vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
     if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
         return {}

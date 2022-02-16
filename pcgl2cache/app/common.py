@@ -196,9 +196,6 @@ def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
         try:
             rep_coord = features["rep_coord_nm"]
             rep_coord = np.array(rep_coord, dtype=np.uint64)
-            # l2_max_scaled_coords = np.array(
-            #     (np.array(l2_max_scaled_coords) + offset) * cv.resolution
-            # )
             offset = coord + start_offset
             rep_coord = (rep_coord + offset) * cv.resolution
             result[l2id]["rep_coord_nm"] = rep_coord

@@ -1,18 +1,7 @@
 import logging
 import os
 
-
-def _read_l2cache_config() -> dict:
-    import yaml
-
-    yml_path = os.environ["GRAPH_L2CACHE_CONFIG_PATH"]
-    with open(yml_path, "r") as stream:
-        try:
-            config = yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
-            raise ValueError("Unable to read l2cache config.")
-    return config
+from ..utils import read_l2cache_config
 
 
 class BaseConfig(object):
@@ -29,7 +18,7 @@ class BaseConfig(object):
     PROJECT_ID = os.environ.get("PROJECT_ID", None)
     USE_REDIS_JOBS = False
     CHUNKGRAPH_TABLE_ID = ""
-    L2CACHE_CONFIG = _read_l2cache_config()
+    L2CACHE_CONFIG = read_l2cache_config()
 
 
 class DevelopmentConfig(BaseConfig):

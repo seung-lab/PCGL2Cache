@@ -38,26 +38,21 @@ def callback(payload):
         datefmt="%m/%d/%Y %I:%M:%S %p",
     )
 
-    table_id = payload.attributes["table_id"]
+    graph_id = payload.attributes["table_id"]
     l2ids = get_l2ids(payload)
 
-    # TODO table->cache mapping
-    if table_id is not "fly_v31":
+    l2cache_config = read_l2cache_config()[graph_id]
+    if graph_id is not "fly_v31":
         # currently no other graph has cache, ignore
         return
-    l2_cache_id = payload.attributes.get("l2_cache_id", "l2cache_fly_v31_v1")
+    l2_cache_id = payload.attributes.get("l2_cache_id", l2cache_config["l2cache_id"])
 
     logging.log(
         INFO_PRIORITY,
-        f"Calculating features for {l2ids.size} L2 IDs, graph: {table_id}, cache: {l2_cache_id}.",
+        f"Calculating features for {l2ids.size} L2 IDs, graph: {graph_id}, cache: {l2_cache_id}.",
     )
 
-    # TODO table->graphene mapping
-    cv_path = getenv(
-        "CV_GRAPHENE_PATH",
-        "graphene://https://prodv1.flywire-daf.com/segmentation/1.0/fly_v31",
-    )
-
+    cv_path = l2cache_config["cv_path"]
     client = BigTableClient(l2_cache_id)
     cg = ChunkedGraph(table_id)
     cv = CloudVolume(

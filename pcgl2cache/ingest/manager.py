@@ -2,21 +2,7 @@ import pickle
 from typing import Dict
 
 from rq import Queue as RQueue
-
-
 from . import IngestConfig
-
-
-def _get_cg(graph_id):
-    from os import environ
-
-    if environ.get("CHUNKEDGRAPH_VERSION", "1") == "1":
-        from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
-
-        return ChunkedGraph(graph_id)
-    from pychunkedgraph.graph import ChunkedGraph
-
-    return ChunkedGraph(graph_id=graph_id)
 
 
 class IngestionManager:
@@ -42,8 +28,10 @@ class IngestionManager:
 
     @property
     def cg(self):
+        from ..utils import get_chunkedgraph
+
         if self._cg is None:
-            self._cg = _get_cg(self._graph_id)
+            self._cg = get_chunkedgraph(self._graph_id)
         return self._cg
 
     @property

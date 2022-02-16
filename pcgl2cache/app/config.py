@@ -1,6 +1,18 @@
 import logging
 import os
-import json
+
+
+def _read_l2cache_config() -> dict:
+    import yaml
+
+    yml_path = os.environ["GRAPH_L2CACHE_CONFIG_PATH"]
+    with open(yml_path, "r") as stream:
+        try:
+            config = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+            raise ValueError("Unable to read l2cache config.")
+    return config
 
 
 class BaseConfig(object):
@@ -17,13 +29,7 @@ class BaseConfig(object):
     PROJECT_ID = os.environ.get("PROJECT_ID", None)
     USE_REDIS_JOBS = False
     CHUNKGRAPH_TABLE_ID = ""
-
-    DATASET_CACHE_ID_MAP = {}
-    _l2cache_map = os.environ.get("DATASET_CACHE_ID_MAP", "fly_v31=l2cache_fly_v31_v1")
-    _l2cache_map = _l2cache_map.split(",")
-    for mapping in _l2cache_map:
-        dataset_id, l2cache_id = [x.strip() for x in mapping.split("=")]
-        DATASET_CACHE_ID_MAP[dataset_id] = l2cache_id
+    L2CACHE_CONFIG = _read_l2cache_config()
 
 
 class DevelopmentConfig(BaseConfig):

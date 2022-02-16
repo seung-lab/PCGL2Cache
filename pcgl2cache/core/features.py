@@ -220,18 +220,12 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     l2_sizes = np.array(l2_sizes)
     l2_max_dts = np.array(l2_max_dts)
     l2_mean_dts = np.array(l2_mean_dts)
-    # l2_max_coords = np.array((np.array(l2_max_coords) + offset) * cv.resolution)
     # l2_max_scaled_coords = np.array(
     #     (np.array(l2_max_scaled_coords) + offset) * cv.resolution
     # )
 
-    l2_max_coords = np.array(l2_max_coords)
     l2_max_scaled_coords = np.array(l2_max_scaled_coords)
-
-    # l2_bboxs = np.array(l2_bboxs) + offset
     l2_chunk_intersects = np.array(l2_chunk_intersects)
-    # l2_pca_comps = np.array(l2_pca_comps, dtype=object)
-    # l2_pca_vals = np.array(l2_pca_vals, dtype=object)
 
     # Area calculations are handled seaprately and are performed by overlap through
     # shifts. We shift in each dimension and calculate the overlapping segment ids.

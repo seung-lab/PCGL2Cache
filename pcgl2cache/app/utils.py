@@ -108,25 +108,3 @@ def get_registered_attributes() -> dict:
     }
     attrs.pop("meta")
     return attrs
-
-
-def get_chunk_coordinates(cv: CloudVolume, ids: Iterable) -> Iterable:
-    if not len(ids):
-        return np.array([])
-    ids = np.array(ids)
-    layer = cv.get_chunk_layer(ids[0])
-    bits_per_dim = cv.meta.spatial_bit_count[layer]
-
-    x_offset = 64 - cv.meta.n_bits_for_layer_id - bits_per_dim
-    y_offset = x_offset - bits_per_dim
-    z_offset = y_offset - bits_per_dim
-
-    ids = np.array(ids, dtype=int)
-    X = ids >> x_offset & 2**bits_per_dim - 1
-    Y = ids >> y_offset & 2**bits_per_dim - 1
-    Z = ids >> z_offset & 2**bits_per_dim - 1
-    return np.column_stack((X, Y, Z))
-
-
-def add_coordinates_offset():
-    pass

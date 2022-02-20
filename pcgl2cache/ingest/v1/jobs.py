@@ -86,6 +86,6 @@ def _ingest_chunk(
     )
 
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
-    r = run_l2cache(cg, cv, chunk_coord, timestamp)
+    r = run_l2cache(cv, cg, chunk_coord, timestamp)
     write_to_db(BigTableClient(imanager.cache_id), r)
     _post_task_completion(imanager, 2, chunk_coord)

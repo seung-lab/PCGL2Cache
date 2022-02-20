@@ -181,7 +181,7 @@ def handle_attributes(graph_id: str, is_binary=False):
 
 def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
     from .utils import get_l2cache_cv
-    from .utils import get_chunk_coordinates
+    from ..utils import get_chunk_coordinates
 
     cv = get_l2cache_cv(graph_id)
     start_offset = np.array(cv.bounds.to_list()[:3])

@@ -1,12 +1,13 @@
 import logging
 from collections import Counter
-from collections import defaultdict
+from typing import Iterable
 
 import numpy as np
 import fastremap
 from edt import edt
 from sklearn import decomposition
 from kvdbclient import BigTableClient
+from cloudvolume import CloudVolume
 
 from . import attributes
 
@@ -23,12 +24,12 @@ class L2ChunkVolume:
         return self._cg
 
     @property
-    def cv(self):
+    def cv(self) -> CloudVolume:
         return self._cv
 
     @property
     def chunk_size(self):
-        return self._cg.chunk_size.astype(np.int)
+        return self.cv.graph_chunk_size
 
     @property
     def coordinates(self):
@@ -57,18 +58,19 @@ class L2ChunkVolume:
         Remaps suoervoxel IDs in a chunk volume with L2 parent IDs represented by contiguous IDs.
         """
         vol = self.get_volume()
-        sv_ids = fastremap.unique(vol)
-        sv_ids = sv_ids[sv_ids != 0]
-        if len(sv_ids) == 0:
+        svids = fastremap.unique(vol)
+        svids = svids[svids != 0]
+        if len(svids) == 0:
             return vol.astype(np.uint32), {}
 
-        _l2ids = self.cg.get_roots(sv_ids, stop_layer=2, time_stamp=self.timestamp)
+        _l2ids = _get_l2_ids(self, svids)
         if l2id is not None:
             # remap given l2id from get_roots to given l2id
             remapping = {}
-            children = self.cg.get_children(l2id)
+            if self.cg is not None:
+                children = self.cg.get_children(l2id)
             try:
-                idx = np.where(sv_ids == children[0])[0][0]
+                idx = np.where(svids == children[0])[0][0]
                 parent = _l2ids[idx]
                 remapping[parent] = l2id
             except IndexError:
@@ -83,11 +85,18 @@ class L2ChunkVolume:
         cont_ids = fastremap.remap(_l2ids, dict(zip(u_l2ids, u_cont_ids)))
         fastremap.remap(
             vol,
-            dict(zip(sv_ids, cont_ids)),
+            dict(zip(svids, cont_ids)),
             preserve_missing_labels=True,
             in_place=True,
         )
         return vol.astype(np.uint32), dict(zip(u_cont_ids, u_l2ids))
+
+
+def _get_l2_ids(l2vol: L2ChunkVolume, svids: np.array) -> np.array:
+    if l2vol.cg:
+        return l2vol.cg.get_roots(svids, stop_layer=2, time_stamp=l2vol.timestamp)
+
+    return l2vol.cv.get_roots(svids, timestamp=l2vol.timestamp, stop_layer=2)
 
 
 def get_edt_stack(vol_l2, resolution):
@@ -273,10 +282,14 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     }
 
 
-def run_l2cache(cg, cv, chunk_coord=None, timestamp=None, l2id=None):
+def run_l2cache(cv: CloudVolume, cg=None, chunk_coord=None, timestamp=None, l2id=None):
     if chunk_coord is None:
         assert l2id is not None
-        chunk_coord = cg.get_chunk_coordinates(l2id)
+        from ..utils import get_chunk_coordinates
+
+        _coords = get_chunk_coordinates(cv, [l2id])
+        chunk_coord = _coords[0]
+
     l2chunk = L2ChunkVolume(cg, cv, np.array(list(chunk_coord), dtype=int), timestamp)
     vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
     if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:

@@ -69,6 +69,8 @@ class L2ChunkVolume:
             remapping = {}
             if self.cg is not None:
                 children = self.cg.get_children(l2id)
+            else:
+                children = self.cv.get_leaves(l2id, self.cv.bounds, 0)
             try:
                 idx = np.where(svids == children[0])[0][0]
                 parent = _l2ids[idx]

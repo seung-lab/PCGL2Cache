@@ -1,13 +1,10 @@
-from typing import DefaultDict
 from typing import Iterable
-from collections import defaultdict
 from os import getenv
 
 import numpy as np
 from messagingclient import MessagingClient
 from kvdbclient.base import Entry
 from kvdbclient.base import EntryKey
-from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
 

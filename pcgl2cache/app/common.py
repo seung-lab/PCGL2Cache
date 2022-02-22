@@ -188,8 +188,9 @@ def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
     coords = get_chunk_coordinates(cv, l2ids)
 
     for l2id, coord in zip(l2ids, coords):
+        key = str(l2id)
         try:
-            features = result[l2id]
+            features = result[key]
         except KeyError:
             continue
 
@@ -198,7 +199,7 @@ def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
             rep_coord = np.array(rep_coord, dtype=np.uint64)
             offset = coord + start_offset
             rep_coord = (rep_coord + offset) * cv.resolution
-            result[l2id]["rep_coord_nm"] = rep_coord
+            result[key]["rep_coord_nm"] = rep_coord
         except KeyError:
             continue
 

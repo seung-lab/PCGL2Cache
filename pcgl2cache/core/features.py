@@ -220,7 +220,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
 
         pca.fit(coords_p * cv.resolution)
         comps = np.array(pca.components_, dtype=attributes.PCA.basetype)
-        vals = np.array(pca.singular_values_, dtype=attributes.PCA.basetype)
+        vals = np.array(pca.singular_values_, dtype=attributes.PCA_VAL.basetype)
         l2_pca_comps.append(comps)
         l2_pca_vals.append(vals)
 

@@ -39,7 +39,7 @@ def get_chunk_coordinates(cv: CloudVolume, ids: Iterable) -> Iterable:
         return np.array([])
     ids = np.array(ids)
     layer = cv.get_chunk_layer(ids[0])
-    bits_per_dim = cv.meta.spatial_bit_count[layer]
+    bits_per_dim = cv.meta.spatial_bit_count(layer)
 
     x_offset = 64 - cv.meta.n_bits_for_layer_id - bits_per_dim
     y_offset = x_offset - bits_per_dim

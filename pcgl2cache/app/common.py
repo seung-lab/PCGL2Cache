@@ -154,6 +154,8 @@ def handle_attributes(graph_id: str, is_binary=False):
     if attribute_names is not None:
         attribute_names = [x.strip() for x in attribute_names.split(",")]
         _attributes = get_registered_attributes()
+        if graph_id == "minnie3_v1":
+            _attributes.pop("pca_val")
         attributes = []
         for name in attribute_names:
             # assert name in _attributes

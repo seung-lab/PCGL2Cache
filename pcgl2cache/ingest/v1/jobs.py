@@ -13,7 +13,6 @@ from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
 
 def _post_task_completion(imanager: IngestionManager, layer: int, coords: np.ndarray):
     chunk_str = "_".join(map(str, coords))
-    # remove from queued hash and put in completed hash
     imanager.redis.sadd(f"{layer}c", chunk_str)
     return
 

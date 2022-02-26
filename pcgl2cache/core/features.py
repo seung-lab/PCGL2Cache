@@ -16,10 +16,10 @@ class L2ChunkVolume:
         self._cv = cv
         self._cg = cg
         self._coordinates = coordinates
+        self._chunk_size = self.cv.graph_chunk_size
         self._coordinates_sv = coordinates * self.chunk_size
         self._timestamp = timestamp
-        self._chunk_size = self.cv.graph_chunk_size
-        self._vol_bounds = self.cv.bounds
+        self._vol_bounds = self._cv.bounds
 
     @property
     def cg(self):

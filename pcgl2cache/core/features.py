@@ -1,4 +1,3 @@
-import chunk
 import logging
 from collections import Counter
 

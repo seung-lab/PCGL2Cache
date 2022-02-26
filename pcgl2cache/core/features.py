@@ -108,7 +108,7 @@ def _get_l2_ids(l2vol: L2ChunkVolume, svids: np.array) -> np.array:
         l2ids = l2vol.cv.get_roots(svids, timestamp=l2vol.timestamp, stop_layer=2)
     layers = l2vol.cg.get_chunk_layers(l2ids)
     sv_mask = layers == 1
-    assert np.all(layers == 2) or np.sum(sv_mask) == 0
+    l2ids[sv_mask] = 0
     return l2ids
 
 

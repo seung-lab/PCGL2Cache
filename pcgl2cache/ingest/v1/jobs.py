@@ -37,6 +37,7 @@ def enqueue_atomic_tasks(
             -1, 3
         )
         chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
+        # chunk_coords = [[103, 38, 0], [115, 85, 0]]
 
     print(f"Jobs count: {len(chunk_coords)}")
     chunked_jobs = chunked(chunk_coords, 1000)

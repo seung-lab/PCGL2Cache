@@ -10,9 +10,8 @@ from rq import Queue
 from rq import Worker
 from rq.worker import WorkerStatus
 from rq.job import Job
-from rq.exceptions import InvalidJobOperationError
-from rq.registry import StartedJobRegistry
 from rq.registry import FailedJobRegistry
+from rq.exceptions import NoSuchJobError
 from flask import current_app
 from flask.cli import AppGroup
 
@@ -87,6 +86,8 @@ def enqueue(queue, job_ids):
 @click.argument("job_ids", nargs=-1)
 def requeue(queue, all, job_ids):
     """Requeue failed jobs."""
+    from rq.exceptions import InvalidJobOperationError
+
     failed_job_registry = FailedJobRegistry(queue, connection=connection)
     if all:
         job_ids = failed_job_registry.get_job_ids()
@@ -100,7 +101,7 @@ def requeue(queue, all, job_ids):
     for job_id in job_ids:
         try:
             failed_job_registry.requeue(job_id)
-        except InvalidJobOperationError:
+        except (InvalidJobOperationError, NoSuchJobError):
             fail_count += 1
 
     if fail_count > 0:
@@ -117,6 +118,8 @@ def clean_start_registry(queue):
     Sometimes started jobs are not moved to failed registry (network issues)
     This command takes the jobs off the started registry and reueues them
     """
+    from rq.registry import StartedJobRegistry
+
     registry = StartedJobRegistry(name=queue, connection=connection)
     cleaned_jobs = registry.cleanup()
     print(f"Requeued {len(cleaned_jobs)} jobs from the started job registry.")
@@ -127,9 +130,16 @@ def clean_start_registry(queue):
 def clear_failed_registry(queue):
     failed_job_registry = FailedJobRegistry(queue, connection=connection)
     job_ids = failed_job_registry.get_job_ids()
+    count = 0
     for job_id in job_ids:
-        failed_job_registry.remove(job_id, delete_job=True)
+        try:
+            failed_job_registry.remove(job_id, delete_job=True)
+        except NoSuchJobError:
+            count += 1
+
     print(f"Deleted {len(job_ids)} jobs from the failed job registry.")
+    if count > 0:
+        click.secho(f"Unable to clear {count} jobs from failed queue.", fg="red")
 
 
 def init_rq_cmds(app):

@@ -15,7 +15,7 @@ _cluster_ingest_defaults = (
     REDIS_URL,
     10,
     "atomic",
-    int(environ.get("L2CACHE_Q_LIMIT", 2500000)),
+    int(environ.get("L2CACHE_Q_LIMIT", 500000)),
     60,
 )
 ClusterIngestConfig = namedtuple(

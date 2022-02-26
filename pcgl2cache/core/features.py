@@ -1,7 +1,5 @@
-import chunk
 import logging
 from collections import Counter
-from typing import Iterable
 
 import numpy as np
 import fastremap
@@ -14,12 +12,14 @@ from . import attributes
 
 
 class L2ChunkVolume:
-    def __init__(self, cg, cv, coordinates, chunk_size, timestamp):
-        self._cg = cg
+    def __init__(self, cv, cg, coordinates, timestamp):
         self._cv = cv
-        self._chunk_size = np.array(chunk_size, dtype=int)
-        self._coordinates = coordinates * self.chunk_size
+        self._cg = cg
+        self._coordinates = coordinates
+        self._chunk_size = self.cv.graph_chunk_size
+        self._coordinates_sv = coordinates * self.chunk_size
         self._timestamp = timestamp
+        self._vol_bounds = self._cv.bounds
 
     @property
     def cg(self):
@@ -31,11 +31,16 @@ class L2ChunkVolume:
 
     @property
     def chunk_size(self):
-        return self.cv.graph_chunk_size
+        return self._chunk_size
 
     @property
     def coordinates(self):
         return self._coordinates
+
+    @property
+    def coordinates_sv(self):
+        # coordinates in supervoxel space
+        return self._coordinates_sv
 
     @property
     def timestamp(self):
@@ -43,10 +48,10 @@ class L2ChunkVolume:
 
     @property
     def bbox(self):
-        return np.array(self.cv.bounds.to_list())
+        return np.array(self._vol_bounds.to_list())
 
     def get_volume(self):
-        vol_start = self.bbox[:3] + self.coordinates
+        vol_start = self.bbox[:3] + self.coordinates_sv
         vol_end = vol_start + self.chunk_size
 
         return self.cv[
@@ -72,7 +77,7 @@ class L2ChunkVolume:
             if self.cg is not None:
                 children = self.cg.get_children(l2id)
             else:
-                children = self.cv.get_leaves(l2id, self.cv.bounds, 0)
+                children = self.cv.get_leaves(l2id, self._vol_bounds, 0)
             try:
                 idx = np.where(svids == children[0])[0][0]
                 parent = _l2ids[idx]
@@ -98,9 +103,13 @@ class L2ChunkVolume:
 
 def _get_l2_ids(l2vol: L2ChunkVolume, svids: np.array) -> np.array:
     if l2vol.cg:
-        return l2vol.cg.get_roots(svids, stop_layer=2, time_stamp=l2vol.timestamp)
-
-    return l2vol.cv.get_roots(svids, timestamp=l2vol.timestamp, stop_layer=2)
+        l2ids = l2vol.cg.get_roots(svids, stop_layer=2, time_stamp=l2vol.timestamp)
+    else:
+        l2ids = l2vol.cv.get_roots(svids, timestamp=l2vol.timestamp, stop_layer=2)
+    layers = l2vol.cg.get_chunk_layers(l2ids)
+    sv_mask = layers == 1
+    assert np.all(layers == 2) or np.sum(sv_mask) == 0
+    return l2ids
 
 
 def get_edt_stack(vol_l2, resolution):
@@ -155,18 +164,18 @@ def process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=None):
     return cmap_stack, l2ids
 
 
-def dist_weight(cv, coords):
+def dist_weight(resolution, coords):
     import warnings
 
     mean_coord = np.mean(coords, axis=0)
-    dists = np.linalg.norm((coords - mean_coord) * cv.resolution, axis=1)
+    dists = np.linalg.norm((coords - mean_coord) * resolution, axis=1)
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore")
         return 1 - dists / dists.max()
 
 
-def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
-    edt_stack = get_edt_stack(vol_l2, cv.resolution)
+def calculate_features(vol_l2, l2_cont_d, resolution, l2id=None):
+    edt_stack = get_edt_stack(vol_l2, resolution)
     cmap_stack, l2ids = process_edt_stack(vol_l2, l2_cont_d, edt_stack, l2id=l2id)
 
     pca = decomposition.PCA(3)
@@ -190,7 +199,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
         # Finally, we compute statistics from the decoded data.
         max_idx = np.argmax(dts)
         l2_max_coords.append(coords[max_idx])
-        l2_max_scaled_coords.append(coords[np.argmax(dts * dist_weight(cv, coords))])
+        l2_max_scaled_coords.append(
+            coords[np.argmax(dts * dist_weight(resolution, coords))]
+        )
         l2_bboxs.append([np.min(coords, axis=0), np.max(coords, axis=0)])
         l2_sizes.append(len(idxs))
         l2_max_dts.append(dts[max_idx])
@@ -200,7 +211,7 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
         )
 
         # for consistency use biological size 0.01 um^3 for filtering small objects
-        if len(idxs) * np.product(cv.resolution) / 1e9 < 0.01:
+        if len(idxs) * np.product(resolution) / 1e9 < 0.01:
             l2_pca_comps.append(np.zeros(shape=(0, 3), dtype=attributes.PCA.basetype))
             l2_pca_vals.append(np.zeros(shape=(0,), dtype=attributes.PCA_VAL.basetype))
             continue
@@ -220,22 +231,15 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
         else:
             coords_p = coords
 
-        pca.fit(coords_p * cv.resolution)
+        pca.fit(coords_p * resolution)
         comps = np.array(pca.components_, dtype=attributes.PCA.basetype)
         vals = np.array(pca.singular_values_, dtype=attributes.PCA_VAL.basetype)
         l2_pca_comps.append(comps)
         l2_pca_vals.append(vals)
 
-        # l2_pca_comps.append(pca.components_)
-        # l2_pca_vals.append(pca.singular_values_)
-
-    # offset = chunk_coord + np.array(cv.bounds.to_list()[:3])
     l2_sizes = np.array(l2_sizes)
     l2_max_dts = np.array(l2_max_dts)
     l2_mean_dts = np.array(l2_mean_dts)
-    # l2_max_scaled_coords = np.array(
-    #     (np.array(l2_max_scaled_coords) + offset) * cv.resolution
-    # )
 
     l2_max_scaled_coords = np.array(l2_max_scaled_coords)
     l2_chunk_intersects = np.array(l2_chunk_intersects)
@@ -260,9 +264,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
         return_counts=True,
     )
 
-    x_area = np.product(cv.resolution[[1, 2]])
-    y_area = np.product(cv.resolution[[0, 2]])
-    z_area = np.product(cv.resolution[[0, 1]])
+    x_area = np.product(resolution[[1, 2]])
+    y_area = np.product(resolution[[0, 2]])
+    z_area = np.product(resolution[[0, 1]])
 
     x_dict = Counter(dict(zip(u_x, c_x * x_area)))
     y_dict = Counter(dict(zip(u_y, c_y * y_area)))
@@ -286,7 +290,9 @@ def calculate_features(cv, chunk_coord, vol_l2, l2_cont_d, l2id=None):
     }
 
 
-def run_l2cache(cv: CloudVolume, cg=None, chunk_coord=None, timestamp=None, l2id=None):
+def run_l2cache(
+    cv: CloudVolume, cg=None, chunk_coord=None, timestamp=None, l2id=None
+) -> dict:
     if chunk_coord is None:
         assert l2id is not None
         from ..utils import get_chunk_coordinates
@@ -294,11 +300,11 @@ def run_l2cache(cv: CloudVolume, cg=None, chunk_coord=None, timestamp=None, l2id
         _coords = get_chunk_coordinates(cv, [l2id])
         chunk_coord = _coords[0]
 
-    l2chunk = L2ChunkVolume(cg, cv, np.array(list(chunk_coord), dtype=int), timestamp)
+    l2chunk = L2ChunkVolume(cv, cg, np.array(list(chunk_coord), dtype=int), timestamp)
     vol_l2, l2_contiguous_d = l2chunk.get_remapped_segmentation(l2id)
     if np.sum(np.array(list(l2_contiguous_d.values())) != 0) == 0:
         return {}
-    return calculate_features(cv, l2chunk.coordinates, vol_l2, l2_contiguous_d, l2id)
+    return calculate_features(vol_l2, l2_contiguous_d, cv.resolution, l2id)
 
 
 def write_to_db(client: BigTableClient, result_d: dict) -> None:

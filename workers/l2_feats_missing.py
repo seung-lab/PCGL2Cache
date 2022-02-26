@@ -5,7 +5,6 @@ import numpy as np
 from messagingclient import MessagingClient
 from kvdbclient.base import Entry
 from kvdbclient.base import EntryKey
-from pychunkedgraph.backend.chunkedgraph_utils import basetypes
 
 
 def get_l2ids(payload) -> Iterable:
@@ -13,11 +12,11 @@ def get_l2ids(payload) -> Iterable:
 
     try:
         # missing IDs
-        return np.frombuffer(payload.data, dtype=basetypes.NODE_ID)
+        return np.frombuffer(payload.data, dtype=np.uint64)
     except (ValueError, TypeError):
         # new IDs after an edit
         data = loads(payload.data)
-        return np.array(data["new_lvl2_ids"], dtype=basetypes.NODE_ID)
+        return np.array(data["new_lvl2_ids"], dtype=np.uint64)
 
 
 def callback(payload):

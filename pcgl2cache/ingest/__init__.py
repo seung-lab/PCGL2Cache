@@ -1,4 +1,5 @@
 from collections import namedtuple
+from os import environ
 
 from .redis import REDIS_URL
 
@@ -14,7 +15,7 @@ _cluster_ingest_defaults = (
     REDIS_URL,
     10,
     "atomic",
-    500000,
+    int(environ.get("L2CACHE_Q_LIMIT", 500000)),
     60,
 )
 ClusterIngestConfig = namedtuple(

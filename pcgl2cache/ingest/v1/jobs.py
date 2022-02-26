@@ -2,6 +2,7 @@ from itertools import product
 from datetime import datetime
 from typing import Sequence
 from typing import Optional
+from os import environ
 
 import numpy as np
 
@@ -39,7 +40,7 @@ def enqueue_atomic_tasks(
         chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
 
     print(f"Jobs count: {len(chunk_coords)}")
-    chunked_jobs = chunked(chunk_coords, 10000)
+    chunked_jobs = chunked(chunk_coords, 1000)
 
     for batch in chunked_jobs:
         q = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
@@ -50,6 +51,10 @@ def enqueue_atomic_tasks(
 
         job_datas = []
         for chunk in batch:
+            x, y, z = chunk
+            chunk_str = f"{x}_{y}_{z}"
+            if imanager.redis.sismember("2c", chunk_str):
+                continue
             job_datas.append(
                 RQueue.prepare_data(
                     _ingest_chunk,
@@ -59,7 +64,7 @@ def enqueue_atomic_tasks(
                         chunk,
                         timestamp,
                     ),
-                    timeout="5m",
+                    timeout=environ.get("JOB_TIMEOUT", "10m"),
                     result_ttl=0,
                     job_id=chunk_id_str(2, chunk),
                 )
@@ -80,12 +85,16 @@ def _ingest_chunk(
     from ...core.features import write_to_db
 
     imanager = IngestionManager.from_pickle(im_info)
-    cg = ChunkedGraph(imanager.cg.table_id)
     cv = CloudVolume(
-        cv_path, bounded=False, fill_missing=True, progress=False, mip=cg.cv.mip
+        cv_path,
+        bounded=False,
+        fill_missing=True,
+        progress=False,
+        mip=imanager.cg.cv.mip,
     )
 
     chunk_coord = np.array(list(chunk_coord), dtype=np.int)
-    r = run_l2cache(cv, cg, chunk_coord, timestamp)
+    r = run_l2cache(cv, imanager.cg, chunk_coord, timestamp)
+    print(f"L2ID count: {len(r.get('l2id', []))}")
     write_to_db(BigTableClient(imanager.cache_id), r)
     _post_task_completion(imanager, 2, chunk_coord)

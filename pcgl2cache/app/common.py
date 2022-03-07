@@ -154,8 +154,6 @@ def handle_attributes(graph_id: str, is_binary=False):
     if attribute_names is not None:
         attribute_names = [x.strip() for x in attribute_names.split(",")]
         _attributes = get_registered_attributes()
-        if graph_id == "minnie3_v1":
-            _attributes.pop("pca_val")
         attributes = []
         for name in attribute_names:
             # assert name in _attributes
@@ -168,9 +166,9 @@ def handle_attributes(graph_id: str, is_binary=False):
     for l2id in l2ids:
         try:
             attrs = entries[l2id]
-            result[str(l2id)] = {k.decode(): v[0].value for k, v in attrs.items()}
+            result[int(l2id)] = {k.decode(): v[0].value for k, v in attrs.items()}
         except KeyError:
-            result[str(l2id)] = {}
+            result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
     try:
@@ -190,7 +188,7 @@ def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
     coords = get_chunk_coordinates(cv, l2ids)
 
     for l2id, coord in zip(l2ids, coords):
-        key = str(l2id)
+        key = int(l2id)
         try:
             features = result[key]
         except KeyError:

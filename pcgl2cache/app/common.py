@@ -166,16 +166,24 @@ def handle_attributes(graph_id: str, is_binary=False):
     for l2id in l2ids:
         try:
             attrs = entries[l2id]
-            result[int(l2id)] = {k.decode(): v[0].value for k, v in attrs.items()}
+            result[int(l2id)] = {}
+            for k, v in attrs.items():
+                val = v[0].value
+                try:
+                    # if empty list skip from response
+                    if len(val) > 0:
+                        result[int(l2id)][k.decode()] = val
+                except TypeError:
+                    # add all scalar values to response
+                    result[int(l2id)][k.decode()] = val
         except KeyError:
             result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
     try:
         _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)
-    except Exception:
-        # TODO inspect error thrown when exchange not found
-        pass
+    except Exception as e:
+        current_app.logger.error(str(e))
     return result
 
 

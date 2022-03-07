@@ -207,7 +207,10 @@ def calculate_features(vol_l2, l2_cont_d, resolution, l2id=None):
         l2_max_dts.append(dts[max_idx])
         l2_mean_dts.append(np.mean(dts))
         l2_chunk_intersects.append(
-            [np.sum(coords == 0, axis=0), np.sum((coords - vol_l2.shape) == 0, axis=0)]
+            [
+                np.sum(coords == 0, axis=0),
+                np.sum((coords + 1 - vol_l2.shape) == 0, axis=0),
+            ]
         )
 
         # for consistency use biological size 0.01 um^3 for filtering small objects

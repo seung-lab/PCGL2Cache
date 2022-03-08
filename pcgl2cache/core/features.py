@@ -104,11 +104,11 @@ class L2ChunkVolume:
 def _get_l2_ids(l2vol: L2ChunkVolume, svids: np.array) -> np.array:
     if l2vol.cg:
         l2ids = l2vol.cg.get_roots(svids, stop_layer=2, time_stamp=l2vol.timestamp)
+        layers = l2vol.cg.get_chunk_layers(l2ids)
+        sv_mask = layers == 1
+        l2ids[sv_mask] = 0
     else:
         l2ids = l2vol.cv.get_roots(svids, timestamp=l2vol.timestamp, stop_layer=2)
-    layers = l2vol.cg.get_chunk_layers(l2ids)
-    sv_mask = layers == 1
-    l2ids[sv_mask] = 0
     return l2ids
 
 

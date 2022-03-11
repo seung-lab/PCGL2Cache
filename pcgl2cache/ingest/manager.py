@@ -1,24 +1,8 @@
-import itertools
-import numpy as np
 import pickle
 from typing import Dict
-from collections import defaultdict
 
-from cloudvolume import CloudVolume
-
+from rq import Queue as RQueue
 from . import IngestConfig
-
-
-def _get_cg(graph_id):
-    from os import environ
-
-    if environ.get("CHUNKEDGRAPH_VERSION", "1") == "1":
-        from pychunkedgraph.backend.chunkedgraph import ChunkedGraph
-
-        return ChunkedGraph(graph_id)
-    from pychunkedgraph.graph import ChunkedGraph
-
-    return ChunkedGraph(graph_id=graph_id)
 
 
 class IngestionManager:
@@ -44,8 +28,10 @@ class IngestionManager:
 
     @property
     def cg(self):
+        from ..utils import get_chunkedgraph
+
         if self._cg is None:
-            self._cg = _get_cg(self._graph_id)
+            self._cg = get_chunkedgraph(self._graph_id)
         return self._cg
 
     @property
@@ -55,7 +41,7 @@ class IngestionManager:
         from .redis import get_redis_connection
         from .redis import keys as r_keys
 
-        self._redis = get_redis_connection(self._config.CLUSTER.REDIS_URL)
+        self._redis = get_redis_connection()
         self._redis.set(r_keys.INGESTION_MANAGER, self.serialize_info(pickled=True))
         return self._redis
 
@@ -73,7 +59,7 @@ class IngestionManager:
             return pickle.dumps(info)
         return info
 
-    def get_task_queue(self, q_name):
+    def get_task_queue(self, q_name) -> RQueue:
         from .redis import get_rq_queue
 
         if q_name in self._task_queues:

@@ -1,19 +1,13 @@
-import collections
 import json
-import threading
 import time
 import traceback
-import gzip
 import os
-from io import BytesIO as IO
 from datetime import datetime
-import requests
+from typing import Iterable
 
 import numpy as np
-import pandas as pd
 from pytz import UTC
 from cloudvolume import compression
-from middle_auth_client import get_usernames
 
 from flask import g
 from flask import request
@@ -147,13 +141,13 @@ def handle_attr_metadata():
     }
 
 
-def handle_attributes(table_id: str, is_binary=False):
+def handle_attributes(graph_id: str, is_binary=False):
     from ..app.utils import get_l2cache_client
 
     if is_binary:
-        l2_ids = np.frombuffer(request.data, np.uint64)
+        l2ids = np.frombuffer(request.data, np.uint64)
     else:
-        l2_ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
+        l2ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
 
     attributes = None
     attribute_names = request.args.get("attribute_names")
@@ -165,32 +159,66 @@ def handle_attributes(table_id: str, is_binary=False):
             # assert name in _attributes
             attributes.append(_attributes[name])
 
-    cache_client = get_l2cache_client(table_id)
-    entries = cache_client.read_entries(keys=l2_ids, attributes=attributes)
+    cache_client = get_l2cache_client(graph_id)
+    entries = cache_client.read_entries(keys=l2ids, attributes=attributes)
     result = {}
     missing_l2ids = []
-    for l2id in l2_ids:
+    for l2id in l2ids:
         try:
             attrs = entries[l2id]
-            result[str(l2id)] = {k.decode(): v[0].value for k, v in attrs.items()}
+            result[int(l2id)] = {}
+            for k, v in attrs.items():
+                val = v[0].value
+                try:
+                    # if empty list skip from response
+                    if len(val) > 0:
+                        result[int(l2id)][k.decode()] = val
+                except TypeError:
+                    # add all scalar values to response
+                    result[int(l2id)][k.decode()] = val
         except KeyError:
-            result[str(l2id)] = {}
+            result[int(l2id)] = {}
             missing_l2ids.append(l2id)
+    _add_offset_to_coords(graph_id, l2ids, result)
     try:
-        _trigger_cache_update(missing_l2ids, table_id, cache_client.table_id)
-    except Exception:
-        # TODO inspect error thrown when exchange not found
-        pass
+        _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)
+    except Exception as e:
+        current_app.logger.error(str(e))
     return result
 
 
-def _trigger_cache_update(l2ids, table_id: str, l2_cache_id: str) -> None:
+def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
+    from .utils import get_l2cache_cv
+    from ..utils import get_chunk_coordinates
+
+    cv = get_l2cache_cv(graph_id)
+    start_offset = np.array(cv.bounds.to_list()[:3])
+    coords = get_chunk_coordinates(cv, l2ids)
+
+    for l2id, coord in zip(l2ids, coords):
+        key = int(l2id)
+        try:
+            features = result[key]
+        except KeyError:
+            continue
+
+        try:
+            rep_coord = features["rep_coord_nm"]
+            rep_coord = np.array(rep_coord, dtype=np.uint64)
+            offset = (coord * cv.graph_chunk_size) + start_offset
+            rep_coord = (rep_coord + offset) * cv.resolution
+            result[key]["rep_coord_nm"] = rep_coord
+        except KeyError:
+            continue
+
+
+def _trigger_cache_update(l2ids, graph_id: str, l2_cache_id: str) -> None:
     import numpy as np
     from messagingclient import MessagingClient
 
     payload = np.array(l2ids, dtype=np.uint64).tobytes()
     attributes = {
-        "table_id": table_id,
+        "table_id": graph_id,
         "l2_cache_id": l2_cache_id,
     }
 

@@ -154,9 +154,10 @@ def process_edt_stack(vol_l2, l2_contiguous_d, edt_stack, l2id=None):
             logging.warning(f"Unable to process L2 ID {l2id}")
             l2ids = np.array([])
         if l2ids.size == 0:
-            return {}
-        nonzero_mask = vol_l2.flatten() != 0
-        cmap_stack = {l2_cont_id: edt_stack[nonzero_mask]}
+            cmap_stack = {}
+        else:
+            nonzero_mask = vol_l2.flatten() != 0
+            cmap_stack = {l2_cont_id: edt_stack[nonzero_mask]}
     else:
         cmap_stack = fastremap.inverse_component_map(vol_l2.flatten(), edt_stack)
         l2ids = np.array(list(cmap_stack.keys()))

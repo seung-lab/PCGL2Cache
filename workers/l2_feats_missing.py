@@ -43,6 +43,8 @@ def callback(payload):
         l2cache_config = read_l2cache_config()[graph_id]
     except KeyError:
         logging.error(f"Config for {graph_id} not found.")
+        # ignore datasets without l2cache
+        return
 
     l2_cache_id = payload.attributes.get("l2_cache_id", l2cache_config["l2cache_id"])
     logging.log(

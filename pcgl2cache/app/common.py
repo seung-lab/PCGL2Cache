@@ -180,11 +180,32 @@ def handle_attributes(graph_id: str, is_binary=False):
             result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
+
+    if "size_nm3" in attributes:
+        _rescale_volume(graph_id, l2ids, result)
+
     try:
         _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)
     except Exception as e:
         current_app.logger.error(str(e))
     return result
+
+
+def _rescale_volume(graph_id: str, l2ids: Iterable, result: dict):
+    from .utils import get_l2cache_cv
+
+    # Get volume of a supervoxel in nm3
+    cv = get_l2cache_cv(graph_id)
+    sv_vol = np.array(cv.mip_resolution(0)).prod()
+
+    for l2id in l2ids:
+        key = int(l2id)
+        try:
+            features = result[key]
+            vol = features["size_nm3"]
+            result[key]["size_nm3"] = vol * sv_vol
+        except KeyError:
+            continue
 
 
 def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):

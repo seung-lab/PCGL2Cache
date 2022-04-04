@@ -77,6 +77,7 @@ def _ingest_chunk(
     from cloudvolume import CloudVolume
     from pychunkedgraph.graph import ChunkedGraph
     from kvdbclient import BigTableClient
+    from kvdbclient import get_default_client_info
     from ...core.features import run_l2cache
     from ...core.features import write_to_db
 
@@ -98,6 +99,8 @@ def _ingest_chunk(
         timestamp=timestamp,
     )
 
+    config = get_default_client_info().CONFIG
     print(f"L2ID count: {len(r.get('l2id', []))}")
-    write_to_db(BigTableClient(imanager.cache_id), r)
+
+    write_to_db(BigTableClient(imanager.cache_id, config=config), r)
     _post_task_completion(imanager, 2, chunk_coord)

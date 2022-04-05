@@ -196,7 +196,7 @@ def _rescale_volume(graph_id: str, l2ids: Iterable, result: dict):
 
     # Get volume of a supervoxel in nm3
     cv = get_l2cache_cv(graph_id)
-    sv_vol = np.array(cv.mip_resolution(0)).prod()
+    sv_vol = np.array(cv.mip_resolution(0), dtype=np.int64).prod()
 
     for l2id in l2ids:
         key = int(l2id)

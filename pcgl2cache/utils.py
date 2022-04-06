@@ -29,7 +29,10 @@ def read_l2cache_config() -> dict:
     """
     import yaml
 
-    yml_path = environ["GRAPH_L2CACHE_CONFIG_PATH"]
+    try:
+        yml_path = environ["GRAPH_L2CACHE_CONFIG_PATH"]
+    except KeyError:
+        return {}
     with open(yml_path, "r") as stream:
         return yaml.safe_load(stream)
 

@@ -33,6 +33,7 @@ def ingest_cache(
     Takes ingest config from a yaml file and queues atomic tasks
     """
     from datetime import datetime
+    from datetime import timezone
     from . import IngestConfig
     from . import ClusterIngestConfig
     from .v1.jobs import enqueue_atomic_tasks
@@ -44,8 +45,10 @@ def ingest_cache(
         client = BigTableClient(config=get_default_client_info().CONFIG)
         client.create_table(cache_id)
 
-    # example format Jun 1 2005 1:33PM
-    timestamp = datetime.strptime(timestamp, "%b %d %Y %I:%M%p")
+    # example format 2018-06-29 08:15:27
+    timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=timezone.utc
+    )
     enqueue_atomic_tasks(
         IngestionManager(
             IngestConfig(CLUSTER=ClusterIngestConfig(), TEST_RUN=test),
@@ -72,6 +75,7 @@ def ingest_cache_v2(
     Takes ingest config from a yaml file and queues atomic tasks
     """
     from datetime import datetime
+    from datetime import timezone
     from . import IngestConfig
     from . import ClusterIngestConfig
     from .v2.jobs import enqueue_atomic_tasks
@@ -83,8 +87,10 @@ def ingest_cache_v2(
         client = BigTableClient(config=get_default_client_info().CONFIG)
         client.create_table(cache_id)
 
-    # example format Jun 1 2005 1:33PM
-    timestamp = datetime.strptime(timestamp, "%b %d %Y %I:%M%p")
+    # example format 2018-06-29 08:15:27
+    timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=timezone.utc
+    )
     enqueue_atomic_tasks(
         IngestionManager(
             IngestConfig(CLUSTER=ClusterIngestConfig(), TEST_RUN=test),

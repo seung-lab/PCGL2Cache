@@ -181,10 +181,7 @@ def handle_attributes(graph_id: str, is_binary=False):
             result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
-
-    if attributes is not None:
-        if _attributes["size_nm3"] in attributes:
-            _rescale_volume(graph_id, l2ids, result)
+    _rescale_volume(graph_id, l2ids, result)
 
     try:
         _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)

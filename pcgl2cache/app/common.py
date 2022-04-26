@@ -4,6 +4,7 @@ import traceback
 import os
 from datetime import datetime
 from typing import Iterable
+from functools import lru_cache
 
 import numpy as np
 from pytz import UTC
@@ -180,11 +181,35 @@ def handle_attributes(graph_id: str, is_binary=False):
             result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
+    _rescale_volume(graph_id, l2ids, result)
+
     try:
         _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)
     except Exception as e:
         current_app.logger.error(str(e))
     return result
+
+
+@lru_cache(maxsize=128)
+def _sv_volume(graph_id):
+    from .utils import get_l2cache_cv
+
+    cv = get_l2cache_cv(graph_id)
+    return np.array(cv.resolution).prod()
+
+
+def _rescale_volume(graph_id: str, l2ids: Iterable, result: dict):
+    # Get volume of a supervoxel in nm3
+    sv_vol = _sv_volume(graph_id)
+
+    for l2id in l2ids:
+        key = int(l2id)
+        try:
+            features = result[key]
+            vol = features["size_nm3"]
+            result[key]["size_nm3"] = vol * sv_vol
+        except KeyError:
+            continue
 
 
 def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):

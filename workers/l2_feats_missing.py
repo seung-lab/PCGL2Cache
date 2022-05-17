@@ -23,7 +23,7 @@ def callback(payload):
     import gc
     import logging
     from cloudvolume import CloudVolume
-    from kvdbclient import BigTableClient
+    from kvdbclient import BigTableClient, get_default_client_info
     from pcgl2cache.core.attributes import SIZE_NM3
     from pcgl2cache.core.features import run_l2cache
     from pcgl2cache.core.features import write_to_db
@@ -53,7 +53,8 @@ def callback(payload):
     )
 
     cv_path = l2cache_config["cv_path"]
-    client = BigTableClient(l2_cache_id)
+    info = get_default_client_info()
+    client = BigTableClient(l2_cache_id, config=info.CONFIG)
     cv = CloudVolume(cv_path, bounded=False, fill_missing=True, progress=False)
     for _id in l2ids:
         if cv.get_chunk_layer(_id) != 2:

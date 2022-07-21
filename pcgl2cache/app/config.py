@@ -19,6 +19,7 @@ class BaseConfig(object):
     USE_REDIS_JOBS = False
     CHUNKGRAPH_TABLE_ID = ""
     L2CACHE_CONFIG = read_l2cache_config()
+    AUTH_SERVICE_NAMESPACE = "pychunkedgraph"
 
 
 class DevelopmentConfig(BaseConfig):

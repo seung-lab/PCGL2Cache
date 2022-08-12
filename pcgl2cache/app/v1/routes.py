@@ -34,13 +34,13 @@ def remap_public(func=None, *, check_node_ids=False):
                 # if table table_id isn't in virtual
                 # tables then just return
                 return f(*args, **kwargs)
-            else:
-                # then we have a virtual table
-                # and we want to remap the table name
-                new_table = virtual_tables[table_id]["table_id"]
-                kwargs["table_id"] = new_table
 
-                return f(*args, **kwargs)
+            # then we have a virtual table
+            # and we want to remap the table name
+            new_table = virtual_tables[table_id]["table_id"]
+            kwargs["table_id"] = new_table
+
+            return f(*args, **kwargs)
 
         return decorated_function
 

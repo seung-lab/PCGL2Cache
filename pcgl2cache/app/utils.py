@@ -103,6 +103,10 @@ def tobinary_multiples(arr):
     return [np.array(arr_i).tobytes() for arr_i in arr]
 
 
+def get_instance_folder_path():
+    return os.path.join(get_app_base_path(), "instance")
+
+
 def get_registered_attributes() -> dict:
     from ..core import attributes
 

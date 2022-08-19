@@ -10,7 +10,6 @@ import numpy as np
 from pytz import UTC
 from cloudvolume import compression
 
-from flask import g
 from flask import request
 from flask import jsonify
 from flask import Blueprint
@@ -182,10 +181,7 @@ def handle_attributes(graph_id: str, is_binary=False):
             result[int(l2id)] = {}
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
-<<<<<<< HEAD
     _rescale_volume(graph_id, l2ids, result)
-=======
->>>>>>> 870d8e8b2d96611ec24825892eadc4c54873368d
     update_cache = request.args.get("update_cache", default=True, type=toboolean)
     if not update_cache or len(l2ids) == 0:
         return result

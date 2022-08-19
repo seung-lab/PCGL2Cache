@@ -216,6 +216,10 @@ def _trigger_cache_update(l2ids, graph_id: str, l2_cache_id: str) -> None:
     import numpy as np
     from messagingclient import MessagingClient
 
+    if len(l2ids) == 0:
+        # do not publish if no IDs
+        return
+
     payload = np.array(l2ids, dtype=np.uint64).tobytes()
     attributes = {
         "table_id": graph_id,

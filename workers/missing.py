@@ -29,7 +29,7 @@ def callback(payload):
     calculate_features(l2ids, l2cache_id, l2cache_config["cv_path"])
     logging.log(
         INFO_PRIORITY,
-        f"Calculated features for {l2ids.size} L2 IDs, graph: {graph_id}, cache: {l2cache_id}.",
+        f"Calculated features for {l2ids.size} L2 IDs {l2ids[:5]}..., graph: {graph_id}, cache: {l2cache_id}.",
     )
 
 

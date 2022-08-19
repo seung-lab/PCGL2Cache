@@ -7,7 +7,6 @@ from typing import Iterable
 from functools import lru_cache
 
 import numpy as np
-from pytz import UTC
 from cloudvolume import compression
 
 from flask import request

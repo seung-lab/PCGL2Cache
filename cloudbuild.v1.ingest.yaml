@@ -3,8 +3,8 @@ steps:
   timeout: 600s
   args:
   - build
-  - "--tag=gcr.io/neuromancer-seung-import/pcgl2cache:ingest_v1"
+  - "--tag=gcr.io/$PROJECT_ID/pcgl2cache:ingest_v1"
   - "--file=./ingest.v1.Dockerfile"
   - .
 images:
-- "gcr.io/neuromancer-seung-import/pcgl2cache:ingest_v1"
+- "gcr.io/$PROJECT_ID/pcgl2cache:ingest_v1"

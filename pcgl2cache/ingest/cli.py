@@ -30,7 +30,6 @@ def ingest_cache(
 ):
     """
     Main ingest command
-    Takes ingest config from a yaml file and queues atomic tasks
     """
     from datetime import datetime
     from datetime import timezone
@@ -72,7 +71,6 @@ def ingest_cache_v2(
 ):
     """
     Main ingest command
-    Takes ingest config from a yaml file and queues atomic tasks
     """
     from datetime import datetime
     from datetime import timezone
@@ -87,7 +85,7 @@ def ingest_cache_v2(
         client = BigTableClient(config=get_default_client_info().CONFIG)
         client.create_table(cache_id)
 
-    # example format 2018-06-29 08:15:27
+    # example format 2022-06-29 08:15:27
     timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S").replace(
         tzinfo=timezone.utc
     )

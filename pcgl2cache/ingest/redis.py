@@ -16,7 +16,7 @@ REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
 REDIS_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
 
 keys_fields = ("INGESTION_MANAGER", "ATOMIC_HASH_FINISHED")
-keys_defaults = ("pcg:imanager", "rq:finished:atomic")
+keys_defaults = ("pcg:imanager", "rq:finished:l2")
 Keys = namedtuple("keys", keys_fields, defaults=keys_defaults)
 
 keys = Keys()

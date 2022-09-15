@@ -42,7 +42,6 @@ def jsonify_with_kwargs(data, as_response=True, **kwargs):
 
 def get_l2cache_client(graph_id: str) -> BigTableClient:
     from kvdbclient import get_default_client_info
-
     l2cache_config = current_app.config["L2CACHE_CONFIG"]
     assert graph_id in l2cache_config, f"Dataset {graph_id} does not have an L2 Cache."
 

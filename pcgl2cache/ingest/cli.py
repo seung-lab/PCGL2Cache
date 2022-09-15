@@ -23,13 +23,13 @@ def flush_redis():
 @click.argument("graph_id", type=str)
 @click.argument("cv_path", type=str)
 @click.argument("timestamp", type=str)
-@click.option("--create", is_flag=True)
-@click.option("--test", is_flag=True)
+@click.option("--create", is_flag=True, help="Creates a bigtable named CACHE_ID.")
+@click.option("--test", is_flag=True, help="Queues 8 chunks at the center of the dataset.")
 def ingest_cache(
     cache_id: str, graph_id: str, cv_path: str, timestamp: str, create: bool, test: bool
 ):
     """
-    Main ingest command
+    Main ingest command for old pychunkedgraph format.
     """
     from datetime import datetime
     from datetime import timezone
@@ -64,13 +64,13 @@ def ingest_cache(
 @click.argument("graph_id", type=str)
 @click.argument("cv_path", type=str)
 @click.argument("timestamp", type=str)
-@click.option("--create", is_flag=True)
-@click.option("--test", is_flag=True)
+@click.option("--create", is_flag=True, help="Creates a bigtable named CACHE_ID.")
+@click.option("--test", is_flag=True, help="Queues 8 chunks at the center of the dataset.")
 def ingest_cache_v2(
     cache_id: str, graph_id: str, cv_path: str, timestamp: str, create: bool, test: bool
 ):
     """
-    Main ingest command
+    Main ingest command for new pychunkedgraph format.
     """
     from datetime import datetime
     from datetime import timezone
@@ -102,8 +102,15 @@ def ingest_cache_v2(
 
 @ingest_cli.command("status")
 def ingest_status():
+    """
+    Print progress completed/total.
+    """
+    from .redis import keys as r_keys
+
     redis = get_redis_connection()
-    print(redis.scard("2c"))
+    imanager = IngestionManager.from_pickle(redis.get(r_keys.INGESTION_MANAGER))
+    l2chunk_count = imanager.cg.meta.layer_chunk_counts[2]
+    print(f"{redis.scard('2c')} / {l2chunk_count}")
 
 
 def init_ingest_cmds(app):

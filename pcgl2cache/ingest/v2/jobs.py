@@ -1,5 +1,6 @@
 from itertools import product
 from datetime import datetime
+from typing import Tuple
 from typing import Sequence
 from typing import Optional
 from os import environ
@@ -15,6 +16,13 @@ def _post_task_completion(imanager: IngestionManager, layer: int, coords: np.nda
     # remove from queued hash and put in completed hash
     imanager.redis.sadd(f"{layer}c", chunk_str)
     return
+
+
+def randomize_grid_points(X: int, Y: int, Z: int) -> Tuple[int, int, int]:
+    indices = np.arange(X * Y * Z)
+    np.random.shuffle(indices)
+    for index in indices:
+        yield np.unravel_index(index, (X, Y, Z))
 
 
 def enqueue_atomic_tasks(
@@ -36,36 +44,39 @@ def enqueue_atomic_tasks(
         chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
 
     print(f"Jobs count: {len(chunk_coords)}")
-    chunked_jobs = chunked(chunk_coords, 100)
+    batch_size = int(environ.get("L2JOB_BATCH_SIZE", 1000))
 
-    for batch in chunked_jobs:
-        q = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
-        # for optimal use of redis memory wait if queue limit is reached
-        if len(q) > imanager.config.CLUSTER.L2CACHE_Q_LIMIT:
-            print(f"Sleeping {imanager.config.CLUSTER.L2CACHE_Q_INTERVAL}s...")
-            sleep(imanager.config.CLUSTER.L2CACHE_Q_INTERVAL)
+    job_datas = []
+    for chunk_coord in randomize_grid_points(*atomic_chunk_bounds):
+        q = imanager.get_task_queue(imanager.config.CLUSTER.ATOMIC_Q_NAME)
+        # buffer for optimal use of redis memory
+        if len(q) > imanager.config.CLUSTER.ATOMIC_Q_LIMIT:
+            print(f"Sleeping {imanager.config.CLUSTER.ATOMIC_Q_INTERVAL}s...")
+            sleep(imanager.config.CLUSTER.ATOMIC_Q_INTERVAL)
 
-        job_datas = []
-        for chunk in batch:
-            x, y, z = chunk
-            chunk_str = f"{x}_{y}_{z}"
-            if imanager.redis.sismember("2c", chunk_str):
-                continue
-            job_datas.append(
-                RQueue.prepare_data(
-                    _ingest_chunk,
-                    args=(
-                        imanager.serialize_info(pickled=True),
-                        cv_path,
-                        chunk,
-                        timestamp,
-                    ),
-                    timeout=environ.get("JOB_TIMEOUT", "5m"),
-                    result_ttl=0,
-                    job_id=chunk_id_str(2, chunk),
-                )
+        x, y, z = chunk_coord
+        chunk_str = f"{x}_{y}_{z}"
+        if imanager.redis.sismember("2c", chunk_str):
+            # already done, skip
+            continue
+        job_datas.append(
+            RQueue.prepare_data(
+                _ingest_chunk,
+                args=(
+                    imanager.serialize_info(pickled=True),
+                    cv_path,
+                    chunk_coord,
+                    timestamp,
+                ),
+                timeout=environ.get("JOB_TIMEOUT", "5m"),
+                result_ttl=0,
+                job_id=chunk_id_str(2, chunk_coord),
             )
-        q.enqueue_many(job_datas)
+        )
+        if len(job_datas) % batch_size == 0:
+            q.enqueue_many(job_datas)
+            job_datas = []
+    q.enqueue_many(job_datas)
 
 
 def _ingest_chunk(

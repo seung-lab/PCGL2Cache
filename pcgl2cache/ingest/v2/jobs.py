@@ -48,11 +48,11 @@ def enqueue_atomic_tasks(
 
     job_datas = []
     for chunk_coord in randomize_grid_points(*atomic_chunk_bounds):
-        q = imanager.get_task_queue(imanager.config.CLUSTER.ATOMIC_Q_NAME)
+        q = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
         # buffer for optimal use of redis memory
-        if len(q) > imanager.config.CLUSTER.ATOMIC_Q_LIMIT:
-            print(f"Sleeping {imanager.config.CLUSTER.ATOMIC_Q_INTERVAL}s...")
-            sleep(imanager.config.CLUSTER.ATOMIC_Q_INTERVAL)
+        if len(q) > imanager.config.CLUSTER.L2CACHE_Q_LIMIT:
+            print(f"Sleeping {imanager.config.CLUSTER.L2CACHE_Q_INTERVAL}s...")
+            sleep(imanager.config.CLUSTER.L2CACHE_Q_INTERVAL)
 
         x, y, z = chunk_coord
         chunk_str = f"{x}_{y}_{z}"

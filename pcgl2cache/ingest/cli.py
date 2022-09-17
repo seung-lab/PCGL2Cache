@@ -109,7 +109,7 @@ def ingest_status():
 
     redis = get_redis_connection()
     imanager = IngestionManager.from_pickle(redis.get(r_keys.INGESTION_MANAGER))
-    l2chunk_count = imanager.cg.meta.layer_chunk_counts[2]
+    l2chunk_count = imanager.cg.meta.layer_chunk_counts[0]
     print(f"{redis.scard('2c')} / {l2chunk_count}")
 
 

@@ -33,8 +33,7 @@ def enqueue_atomic_tasks(
     from ..utils import chunked
 
     atomic_chunk_bounds = imanager.cg.meta.layer_chunk_bounds[2]
-    chunk_coords = list(product(*[range(r) for r in atomic_chunk_bounds]))
-    np.random.shuffle(chunk_coords)
+    chunk_coords = randomize_grid_points(*atomic_chunk_bounds)
 
     if imanager.config.TEST_RUN:
         x, y, z = np.array(atomic_chunk_bounds) // 2
@@ -42,12 +41,13 @@ def enqueue_atomic_tasks(
             -1, 3
         )
         chunk_coords = f((x, x + 1), (y, y + 1), (z, z + 1))
+        print(f"Test jobs count: {len(chunk_coords)}")
 
-    print(f"Jobs count: {len(chunk_coords)}")
+    print(f"Total jobs count: {imanager.cg.meta.layer_chunk_counts[0]}")
     batch_size = int(environ.get("L2JOB_BATCH_SIZE", 1000))
 
     job_datas = []
-    for chunk_coord in randomize_grid_points(*atomic_chunk_bounds):
+    for chunk_coord in chunk_coords:
         q = imanager.get_task_queue(imanager.config.CLUSTER.L2CACHE_Q_NAME)
         # buffer for optimal use of redis memory
         if len(q) > imanager.config.CLUSTER.L2CACHE_Q_LIMIT:

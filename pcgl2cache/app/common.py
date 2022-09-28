@@ -7,10 +7,8 @@ from typing import Iterable
 from functools import lru_cache
 
 import numpy as np
-from pytz import UTC
 from cloudvolume import compression
 
-from flask import g
 from flask import request
 from flask import jsonify
 from flask import Blueprint
@@ -18,6 +16,7 @@ from flask import current_app
 from flask import make_response
 
 from .utils import get_registered_attributes
+from .utils import toboolean
 
 __api_versions__ = [1]
 __pcgl2cache_url_prefix__ = os.environ.get("PCGL2CACHE_URL_PREFIX", "l2cache")
@@ -182,7 +181,9 @@ def handle_attributes(graph_id: str, is_binary=False):
             missing_l2ids.append(l2id)
     _add_offset_to_coords(graph_id, l2ids, result)
     _rescale_volume(graph_id, l2ids, result)
-
+    update_cache = request.args.get("update_cache", default=True, type=toboolean)
+    if not update_cache or len(l2ids) == 0:
+        return result
     try:
         _trigger_cache_update(missing_l2ids, graph_id, cache_client.table_id)
     except Exception as e:

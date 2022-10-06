@@ -31,10 +31,13 @@ def callback(payload):
     l2cache_id = payload.attributes.get("l2_cache_id", l2cache_config["l2cache_id"])
     calculate_features(l2ids, l2cache_id, l2cache_config["cv_path"])
 
-    attributes = {"table_id": graph_id, "operation_id": data["operation_id"]}
-    exchange = getenv("L2CACHE_FINISHED_EXCHANGE", "does-not-exist")
-    c = MessagingClient()
-    c.publish(exchange, l2ids.tobytes(), attributes)
+    # attributes = {
+    #     "table_id": graph_id,
+    #     "operation_id": str(data["operation_id"])
+    # }
+    # exchange = getenv("L2CACHE_FINISHED_EXCHANGE", "does-not-exist")
+    # c = MessagingClient()
+    # c.publish(exchange, l2ids.tobytes(), attributes)
 
     logging.log(
         INFO_PRIORITY,

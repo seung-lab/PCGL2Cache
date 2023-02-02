@@ -30,7 +30,6 @@ def enqueue_atomic_tasks(
 ):
     from time import sleep
     from rq import Queue as RQueue
-    from ..utils import chunked
 
     atomic_chunk_bounds = imanager.cg.meta.layer_chunk_bounds[2]
     chunk_coords = randomize_grid_points(*atomic_chunk_bounds)

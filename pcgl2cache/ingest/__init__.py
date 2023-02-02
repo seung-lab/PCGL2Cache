@@ -7,16 +7,14 @@ from .redis import REDIS_URL
 
 _cluster_ingest_config_fields = (
     "REDIS_URL",
-    "BATCH_SIZE",
     "L2CACHE_Q_NAME",
     "L2CACHE_Q_LIMIT",  # these limits ensure the queue won't use too much memory
     "L2CACHE_Q_INTERVAL",  # sleep interval before queuing the next job when limit is reached
 )
 _cluster_ingest_defaults = (
     REDIS_URL,
-    10,
     "l2",
-    int(environ.get("L2CACHE_Q_LIMIT", 100000)),
+    int(environ.get("L2CACHE_Q_LIMIT", 1000000)),
     60,
 )
 ClusterIngestConfig = namedtuple(

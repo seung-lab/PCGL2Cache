@@ -33,12 +33,19 @@ class CustomJsonEncoder(json.JSONEncoder):
             return obj.__str__()
         return json.JSONEncoder.default(self, obj)
 
+def get_app_base_path():
+    return os.path.dirname(os.path.realpath(__file__))
+
+
+def get_instance_folder_path():
+    return os.path.join(get_app_base_path(), "instance")
+
 
 def create_app(test_config=None):
     from .common import bp as l2cache_bp
     from .v1.routes import bp as l2cache_api_v1
 
-    app = Flask(__name__)
+    app = Flask(__name__,instance_path=get_instance_folder_path(), instance_relative_config=True)
     app.json_encoder = CustomJsonEncoder
     CORS(app, expose_headers="WWW-Authenticate")
 

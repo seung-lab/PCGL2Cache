@@ -1,15 +1,17 @@
+# pylint: disable=invalid-name, missing-docstring, logging-fstring-interpolation, broad-exception-caught, line-too-long
+
+import logging
 from os import getenv
+from pickle import loads
 
 import numpy as np
 from messagingclient import MessagingClient
 
+from pcgl2cache.utils import read_l2cache_config
+from .common import calculate_features
+
 
 def callback(payload):
-    import logging
-    from pickle import loads
-    from pcgl2cache.utils import read_l2cache_config
-    from .common import calculate_features
-
     INFO_PRIORITY = 25
     logging.basicConfig(
         level=INFO_PRIORITY,
@@ -29,7 +31,11 @@ def callback(payload):
         return
 
     l2cache_id = payload.attributes.get("l2_cache_id", l2cache_config["l2cache_id"])
-    calculate_features(l2ids, l2cache_id, l2cache_config["cv_path"])
+
+    try:
+        calculate_features(l2ids, l2cache_id, l2cache_config["cv_path"])
+    except Exception as exc:
+        logging.warning(f"Something went wrong: {exc}")
 
     # attributes = {
     #     "table_id": graph_id,

@@ -98,5 +98,5 @@ def attributes(table_id):
 
 
 @bp.route("/table_mapping", methods=["GET"])
-def attr_metadata():
+def table_mapping():
     return jsonify_with_kwargs(read_l2cache_config())

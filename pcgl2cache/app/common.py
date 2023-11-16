@@ -148,7 +148,8 @@ def handle_attributes(graph_id: str, is_binary=False):
         l2ids = np.frombuffer(request.data, np.uint64)
     else:
         l2ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
-
+    l2ids = np.unique(l2ids)
+    
     attributes = None
     attribute_names = request.args.get("attribute_names")
     if attribute_names is not None:

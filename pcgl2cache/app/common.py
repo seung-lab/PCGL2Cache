@@ -1,22 +1,16 @@
 import json
+import os
 import time
 import traceback
-import os
 from datetime import datetime
-from typing import Iterable
 from functools import lru_cache
+from typing import Iterable
 
 import numpy as np
 from cloudvolume import compression
+from flask import Blueprint, current_app, jsonify, make_response, request
 
-from flask import request
-from flask import jsonify
-from flask import Blueprint
-from flask import current_app
-from flask import make_response
-
-from .utils import get_registered_attributes
-from .utils import toboolean
+from .utils import get_registered_attributes, toboolean
 
 __api_versions__ = [1]
 __pcgl2cache_url_prefix__ = os.environ.get("PCGL2CACHE_URL_PREFIX", "l2cache")
@@ -149,6 +143,8 @@ def handle_attributes(graph_id: str, is_binary=False):
     else:
         l2ids = np.array(json.loads(request.data)["l2_ids"], dtype=np.uint64)
 
+    l2ids = np.unique(l2ids)  # REF: https://github.com/seung-lab/PCGL2Cache/issues/23
+
     attributes = None
     attribute_names = request.args.get("attribute_names")
     if attribute_names is not None:
@@ -214,8 +210,8 @@ def _rescale_volume(graph_id: str, l2ids: Iterable, result: dict):
 
 
 def _add_offset_to_coords(graph_id: str, l2ids: Iterable, result: dict):
-    from .utils import get_l2cache_cv
     from ..utils import get_chunk_coordinates
+    from .utils import get_l2cache_cv
 
     cv = get_l2cache_cv(graph_id)
     start_offset = np.array(cv.bounds.to_list()[:3])

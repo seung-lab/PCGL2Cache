@@ -5,9 +5,9 @@ from middle_auth_client import auth_requires_permission
 from functools import wraps
 
 from ...app import common
-from ...app.utils import tobinary
-from ...app.utils import toboolean
-from ...app.utils import jsonify_with_kwargs
+from ..utils import toboolean
+from ..utils import jsonify_with_kwargs
+from ...utils import read_l2cache_config
 
 bp = Blueprint(
     "pcgl2cache_v1",
@@ -95,3 +95,8 @@ def attributes(table_id):
     )
     gc.collect()
     return result
+
+
+@bp.route("/table_mapping", methods=["GET"])
+def table_mapping():
+    return jsonify_with_kwargs(read_l2cache_config())
